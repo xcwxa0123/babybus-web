@@ -662,6 +662,7 @@ function reload() {
 
 // 初始化地图（仅创建一次）
 async function initMap() {
+    console.log('看看有没有取到config==============>', config)
     // @ts-ignore
     window._AMapSecurityConfig = { securityJsCode: config.public.mapsc };
 
