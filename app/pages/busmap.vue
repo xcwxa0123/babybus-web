@@ -1,7 +1,7 @@
 <template>
   <div class="busmap-page">
     <ClientOnly>
-      <Map keyword="龙口" />
+      <Map keyword="" />
     </ClientOnly>
   </div>
 </template>

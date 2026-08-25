@@ -38,8 +38,6 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      apiBaseUrl: '',
-      socketBaseUrl: '',
       mapscKey: '',
       mapsc: '',
       busSearchKey: '',

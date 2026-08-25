@@ -148,13 +148,13 @@ interface LineLayer {
 }
 
 const props = defineProps<{
-    keyword?: string; // 初始查询关键词（默认龙口）
+    keyword?: string; // 初始查询关键词（默认为空查全量）
 }>();
 
 const mapRef = ref<HTMLDivElement | null>(null);
 const config = useRuntimeConfig();
 
-const keywordInput = ref(props.keyword ?? "龙口");
+const keywordInput = ref(props.keyword ?? "");
 const lines = ref<BusLine[]>([]); // 渲染列表（去重后的正向线路）
 const allLines = ref<BusLine[]>([]); // 完整数据（含反向，供切换反向使用）
 const activeId = ref<string | null>(null);

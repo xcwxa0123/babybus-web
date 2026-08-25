@@ -2,9 +2,11 @@ import Database from 'better-sqlite3'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
+const config = useRuntimeConfig()
+
 // 兼容 NUXT_PUBLIC_DB_PATH 与 DB_PATH 两种环境变量写法
 const dbDir = join(process.cwd(), 'data')
-const dbPath = process.env.NUXT_PUBLIC_DB_PATH || process.env.DB_PATH || join(dbDir, 'local.db')
+const dbPath = config.public.dbPath || process.env.DB_PATH || join(dbDir, 'local.db')
 
 if (!existsSync(dbDir)) {
   mkdirSync(dbDir, { recursive: true })
