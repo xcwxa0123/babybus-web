@@ -1,0 +1,31 @@
+{
+  "name": "babybus",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev --dotenv .env.development",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "build:prod": "cross-env NODE_ENV=production nuxt build --dotenv .env.production",
+    "linuxbuild:prod": "NODE_ENV=production nuxt build --dotenv .env.production"
+  },
+  "dependencies": {
+    "@amap/amap-jsapi-loader": "^1.0.1",
+    "@element-plus/icons-vue": "^2.3.2",
+    "@pinia/nuxt": "^0.11.3",
+    "@tensorflow-models/mobilenet": "^2.1.1",
+    "@tensorflow/tfjs": "^4.22.0",
+    "better-sqlite3": "^13.0.3",
+    "nuxt": "^4.4.2",
+    "vue": "^3.5.30",
+    "vue-router": "^5.0.4"
+  },
+  "devDependencies": {
+    "@element-plus/nuxt": "^1.1.5",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^25.5.0",
+    "cross-env": "^10.1.0"
+  }
+}
