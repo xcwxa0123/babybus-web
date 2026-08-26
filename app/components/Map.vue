@@ -637,7 +637,7 @@ function dedupeLines(data: BusLine[]): BusLine[] {
 }
 
 // 拉取并渲染线路数据（分批加载 + 实时进度条）
-const PAGE_SIZE = 20; // 每批线路数
+const PAGE_SIZE = 40; // 每批线路数
 
 async function loadData(keyword: string) {
     loading.value = true;
