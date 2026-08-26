@@ -155,7 +155,7 @@ function formatInterval(t: string): string {
 
 // ---- 循环拉取脚本任务 ----
 const LOOP_INTERVAL = 1000  // 每 1 秒一次
-const loopStart = ref('375')  // keyword 起始
+const loopStart = ref('631')  // keyword 起始
 const loopEnd = ref('999')  // keyword 截止
 
 const loopRunning = ref(false)
