@@ -1,4 +1,6 @@
 // 批量获取线路渲染数据（含 polyline 和站点），支持分页，用于地图渲染
+import { simplifyPolyline } from '../../utils/geoSimplify'
+
 export default defineEventHandler((event) => {
   try {
     const db = getDb()
@@ -48,9 +50,10 @@ export default defineEventHandler((event) => {
       else stopsByLine.set(stop.bus_id, [stop])
     }
 
+    // 返回前对 polyline 做抽稀，减少传输体积（入库不抽稀，保持精度）
     const result = lines.map((line) => {
       const stops = (stopsByLine.get(line.id) || []).map(({ bus_id, ...rest }) => rest)
-      return { ...line, busstops: stops }
+      return { ...line, polyline: simplifyPolyline(line.polyline || '', 12, 5), busstops: stops }
     })
 
     return { data: result, total, page, pageSize, code: 200, msg: 'ok' }
