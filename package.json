@@ -9,7 +9,8 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "build:prod": "cross-env NODE_ENV=production nuxt build --dotenv .env.production",
-    "linuxbuild:prod": "NODE_ENV=production nuxt build --dotenv .env.production"
+    "linuxbuild:prod": "NODE_ENV=production nuxt build --dotenv .env.production",
+    "buildpost": "cp node_modules/better-sqlite3/build/Release/better_sqlite3.node .output/server/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
