@@ -4,7 +4,7 @@ class busmapaPI{
 
 
     public async getBusmapList(city: string, keywords: string): Promise<any>{
-        return await $fetch(`https://restapi.amap.com/v3/bus/linename?offset=40&page=1&extensions=all&key=${this.BUS_SEARCH_KEY}&city=${city}&keywords=${keywords}`, { method: 'GET' })
+        return await $fetch(`https://restapi.amap.com/v3/bus/linename?offset=99&page=1&extensions=all&key=${this.BUS_SEARCH_KEY}&city=${city}&keywords=${keywords}`, { method: 'GET' })
     }
     public async getCurrentAddr(): Promise<any>{
         return await $fetch(`https://restapi.amap.com/v3/ip?key=${this.BUS_SEARCH_KEY}`, { method: 'GET' })
