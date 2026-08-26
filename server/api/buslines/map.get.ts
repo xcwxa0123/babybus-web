@@ -1,10 +1,11 @@
-// 批量获取线路渲染数据（含 polyline 和站点），支持分页，用于地图渲染
+// 批量获取线路渲染数据（含 polyline 和站点），支持分页，Redis 缓存 + HTTP 缓存
 import { simplifyPolyline } from '../../utils/geoSimplify'
+import { redisGetJson, redisSetJson } from '../../utils/redis'
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
+  // 前期拉数据期间做12小时缓存，数据拉完了就换ETags逻辑
+  setHeader(event, 'Cache-Control', 'public, max-age=43200')
   try {
-    // 前期拉数据期间做12小时缓存，数据拉完了就换ETags逻辑
-    setHeader(event, 'Cache-Control', 'public, max-age=43200')
     const db = getDb()
     const query = getQuery(event)
     const keyword = (query.keyword as string)?.trim() || ''
@@ -12,6 +13,13 @@ export default defineEventHandler((event) => {
     // 分页参数（默认 page=1, pageSize=20）
     const page = Math.max(1, Number(query.page) || 1)
     const pageSize = Math.min(200, Math.max(1, Number(query.pageSize) || 20))
+
+    // ---- Redis 缓存：命中直接返回 ----
+    const cacheKey = `map:${keyword || '*'}:${page}:${pageSize}`
+    const cached = await redisGetJson(cacheKey)
+    if (cached) {
+      return cached
+    }
 
     // 支持按名称模糊匹配
     let where = ''
@@ -58,7 +66,12 @@ export default defineEventHandler((event) => {
       return { ...line, polyline: simplifyPolyline(line.polyline || '', 12, 5), busstops: stops }
     })
 
-    return { data: result, total, page, pageSize, code: 200, msg: 'ok' }
+    const body = { data: result, total, page, pageSize, code: 200, msg: 'ok' }
+
+    // 写入 Redis 缓存（12小时 TTL）
+    await redisSetJson(cacheKey, body, 43200)
+
+    return body
   } catch (error) {
     return { data: [], total: 0, page: 1, pageSize: 20, code: 500, msg: String(error) }
   }

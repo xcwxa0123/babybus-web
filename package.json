@@ -19,6 +19,7 @@
     "@tensorflow-models/mobilenet": "^2.1.1",
     "@tensorflow/tfjs": "^4.22.0",
     "better-sqlite3": "^13.0.3",
+    "ioredis": "^5.11.1",
     "nuxt": "^4.4.2",
     "vue": "^3.5.30",
     "vue-router": "^5.0.4"
