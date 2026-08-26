@@ -18,18 +18,33 @@ export default defineEventHandler((event) => {
       FROM bus_lines ${where} ORDER BY name
     `).all(...params) as any[]
 
-    // 每条线路附带站点（精简：仅 id/name/location/sequence）
-    const stopStmt = db.prepare(`
-      SELECT s.id, s.name, s.location, b.seq AS sequence
-      FROM bus_stop_sequences b
-      JOIN bus_stops s ON s.id = b.stop_id
-      WHERE b.bus_id = ?
-      ORDER BY b.seq ASC
-    `)
+    // 优化：一次批量查出所有线路的站点，避免 N+1 查询
+    let busstops: any[] = []
+    if (lines.length) {
+      // 动态生成 IN 占位符
+      const placeholders = lines.map(() => '?').join(',')
+      const ids = lines.map((l) => l.id)
+      busstops = db.prepare(`
+        SELECT b.bus_id, s.id, s.name, s.location, b.seq AS sequence
+        FROM bus_stop_sequences b
+        JOIN bus_stops s ON s.id = b.stop_id
+        WHERE b.bus_id IN (${placeholders})
+        ORDER BY b.bus_id, b.seq ASC
+      `).all(...ids) as any[]
+    }
+
+    // 内存分组：按 bus_id 把站点挂到对应线路上
+    const stopsByLine = new Map<string, any[]>()
+    for (const stop of busstops) {
+      const arr = stopsByLine.get(stop.bus_id)
+      if (arr) arr.push(stop)
+      else stopsByLine.set(stop.bus_id, [stop])
+    }
 
     const result = lines.map((line) => {
-      const busstops = stopStmt.all(line.id)
-      return { ...line, busstops }
+      // 去掉冗余的 bus_id 字段
+      const stops = (stopsByLine.get(line.id) || []).map(({ bus_id, ...rest }) => rest)
+      return { ...line, busstops: stops }
     })
 
     return { data: result, total: result.length, code: 200, msg: 'ok' }
