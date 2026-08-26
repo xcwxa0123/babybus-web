@@ -1,9 +1,13 @@
-// 批量获取线路渲染数据（含 polyline 和站点），用于地图渲染
+// 批量获取线路渲染数据（含 polyline 和站点），支持分页，用于地图渲染
 export default defineEventHandler((event) => {
   try {
     const db = getDb()
     const query = getQuery(event)
     const keyword = (query.keyword as string)?.trim() || ''
+
+    // 分页参数（默认 page=1, pageSize=20）
+    const page = Math.max(1, Number(query.page) || 1)
+    const pageSize = Math.min(200, Math.max(1, Number(query.pageSize) || 20))
 
     // 支持按名称模糊匹配
     let where = ''
@@ -13,15 +17,18 @@ export default defineEventHandler((event) => {
       params.push(`%${keyword}%`)
     }
 
+    // 总量（用于进度条和分页）
+    const { total } = db.prepare(`SELECT COUNT(*) AS total FROM bus_lines ${where}`).get(...params) as any
+
+    // 当前页线路
     const lines = db.prepare(`
       SELECT id, name, type, uicolor, polyline, citycode, start_stop, end_stop, direc, start_time, end_time, distance, basic_price, total_price, timedesc
-      FROM bus_lines ${where} ORDER BY name
-    `).all(...params) as any[]
+      FROM bus_lines ${where} ORDER BY name LIMIT ? OFFSET ?
+    `).all(...params, pageSize, (page - 1) * pageSize) as any[]
 
-    // 优化：一次批量查出所有线路的站点，避免 N+1 查询
+    // 批量查出当前页线路的站点（避免 N+1）
     let busstops: any[] = []
     if (lines.length) {
-      // 动态生成 IN 占位符
       const placeholders = lines.map(() => '?').join(',')
       const ids = lines.map((l) => l.id)
       busstops = db.prepare(`
@@ -42,13 +49,12 @@ export default defineEventHandler((event) => {
     }
 
     const result = lines.map((line) => {
-      // 去掉冗余的 bus_id 字段
       const stops = (stopsByLine.get(line.id) || []).map(({ bus_id, ...rest }) => rest)
       return { ...line, busstops: stops }
     })
 
-    return { data: result, total: result.length, code: 200, msg: 'ok' }
+    return { data: result, total, page, pageSize, code: 200, msg: 'ok' }
   } catch (error) {
-    return { data: [], total: 0, code: 500, msg: String(error) }
+    return { data: [], total: 0, page: 1, pageSize: 20, code: 500, msg: String(error) }
   }
 })

@@ -44,7 +44,17 @@
 
         <!-- 地图 -->
         <div ref="mapRef" class="map"></div>
-        <div v-if="loading" class="map-loading-mask">地图加载中…</div>
+
+        <!-- 加载进度条（地图先展示，数据分批渲染时实时推进） -->
+        <div v-if="loading" class="map-loading-bar">
+            <div class="loading-info">
+                <span class="loading-text">正在加载线路数据</span>
+                <span class="loading-percent">{{ progress }}%</span>
+            </div>
+            <div class="loading-track">
+                <div class="loading-fill" :style="{ width: progress + '%' }"></div>
+            </div>
+        </div>
 
         <!-- 点击命中多条线路时的候选弹窗 -->
         <div v-if="candidatePopup.visible" class="candidate-popup"
@@ -162,6 +172,8 @@ const sidebarCollapsed = ref(false);
 const bottombarCollapsed = ref(false);
 const loading = ref(true);
 const loadError = ref("");
+const progress = ref(0); // 分批加载进度（0-100）
+const totalLines = ref(0); // 总线路数
 
 // 底部详情弹框是否处于展开状态（选中线路且未收起）
 const isDetailExpanded = computed(() => !!detailLine.value && !bottombarCollapsed.value);
@@ -624,33 +636,66 @@ function dedupeLines(data: BusLine[]): BusLine[] {
     return kept;
 }
 
-// 拉取并渲染线路数据（可重复调用以切换关键词）
+// 拉取并渲染线路数据（分批加载 + 实时进度条）
+const PAGE_SIZE = 20; // 每批线路数
+
 async function loadData(keyword: string) {
     loading.value = true;
     loadError.value = "";
+    progress.value = 0;
+    totalLines.value = 0;
     clearMapLayers();
 
     try {
-        const res = await $fetch<{ data: BusLine[]; code: number }>("/api/buslines/map", {
-            query: { keyword },
+        // 第 1 页：拿到总量 total
+        const first = await $fetch<{ data: BusLine[]; total: number; code: number }>("/api/buslines/map", {
+            query: { keyword, page: 1, pageSize: PAGE_SIZE },
         });
-        const raw = res.data || [];
+        const total = first.total || 0;
+        totalLines.value = total;
+        if (!total) {
+            loading.value = false;
+            return;
+        }
+        const totalPages = Math.ceil(total / PAGE_SIZE);
 
-        // 完整数据（含正反向）统一分配颜色
-        allLines.value = raw.map((line, i) => ({
-            ...line,
-            color: PALETTE[i % PALETTE.length],
-        }));
+        let all: BusLine[] = [];
+        let loaded = 0;
 
-        // 渲染列表：去重反向，只保留正向
-        const data = dedupeLines(allLines.value);
-        lines.value = data.map((line) => ({ ...line, color: line.color ?? PALETTE[0] }));
-        lines.value.forEach((line) => renderLine(line, line.color!));
+        for (let page = 1; page <= totalPages; page++) {
+            const res = page === 1
+                ? first
+                : await $fetch<{ data: BusLine[]; total: number; code: number }>("/api/buslines/map", {
+                    query: { keyword, page, pageSize: PAGE_SIZE },
+                });
+
+            const raw = res.data || [];
+            // 为当前批分配颜色（颜色索引基于已累积数量，保证全局一致）
+            const colored = raw.map((line, i) => ({ ...line, color: PALETTE[(all.length + i) % PALETTE.length] }));
+
+            // 完整数据（含反向，供切换反向使用）
+            all = all.concat(colored);
+            allLines.value = all;
+
+            // 渲染：去重反向后逐条渲染
+            const valid = dedupeLines(colored);
+            valid.forEach((line) => {
+                if (!lineLayers[line.id]) renderLine(line, line.color!);
+            });
+            lines.value = dedupeLines(all); // 更新左侧列表
+
+            loaded += colored.length;
+            progress.value = Math.round((Math.min(loaded, total) / total) * 100);
+
+            // 每批之间稍作停顿，让进度条有可见的推进节奏
+            if (page < totalPages) await new Promise((r) => setTimeout(r, 120));
+        }
 
         map.setFitView();
     } catch (e) {
         loadError.value = "线路数据加载失败，请稍后重试";
     } finally {
+        progress.value = 100;
         loading.value = false;
     }
 }
@@ -700,16 +745,46 @@ onUnmounted(() => {
     height: 800px;
 }
 
-.map-loading-mask {
+/* 加载进度条 */
+.map-loading-bar {
     position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.35);
-    font-size: 14px;
-    color: #606266;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 300;
+    width: 320px;
+    max-width: calc(100% - 48px);
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    padding: 10px 14px;
+    backdrop-filter: blur(4px);
     pointer-events: none;
+}
+.loading-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: #606266;
+}
+.loading-percent {
+    font-weight: 600;
+    color: #409eff;
+    font-variant-numeric: tabular-nums;
+}
+.loading-track {
+    height: 4px;
+    background: #ebeef5;
+    border-radius: 2px;
+    overflow: hidden;
+}
+.loading-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #409eff, #66b1ff);
+    border-radius: 2px;
+    transition: width 0.2s ease;
 }
 
 .panel {
