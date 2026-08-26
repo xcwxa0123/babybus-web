@@ -3,6 +3,8 @@ import { simplifyPolyline } from '../../utils/geoSimplify'
 
 export default defineEventHandler((event) => {
   try {
+    // 前期拉数据期间做12小时缓存，数据拉完了就换ETags逻辑
+    setHeader(event, 'Cache-Control', 'public, max-age=43200')
     const db = getDb()
     const query = getQuery(event)
     const keyword = (query.keyword as string)?.trim() || ''

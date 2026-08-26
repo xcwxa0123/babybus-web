@@ -6,8 +6,6 @@
                 <template v-if="!sidebarCollapsed">
                     <el-input v-model="keywordInput" size="default" placeholder="搜索线路，如：龙口" clearable
                         @keyup.enter="reload">
-                        <!-- <template #suffix>
-            </template> -->
                     </el-input>
                 </template>
                 <el-button class="search-btn" @click="reload" v-if="!sidebarCollapsed"><el-icon><Search /></el-icon></el-button>
