@@ -449,7 +449,6 @@ function selectById(busId: string) {
     highlightLine(busId);
 
     const line = allLines.value.find((l) => l.id === busId);
-    console.log('看看选中data===============>', line)
     detailLine.value = line ?? null;
     detailOpposite.value = line?.direc ? line?.direc != line?.id ? allLines.value.find((l) => l.id === line.direc) ?? null : null : null;
     isReverse.value = false;
@@ -707,7 +706,6 @@ function reload() {
 
 // 初始化地图（仅创建一次）
 async function initMap() {
-    console.log('看看有没有取到config==============>', config)
     // @ts-ignore
     window._AMapSecurityConfig = { securityJsCode: config.public.mapsc };
 
@@ -717,7 +715,7 @@ async function initMap() {
     });
 
     map = new AMap.Map(mapRef.value!, {
-        zoom: 15,
+        zoom: 9,
         center: [120.5, 37.6],
         mapStyle: "amap://styles/whitesmoke", // 浅色极简底图，凸显公交线路
     });
