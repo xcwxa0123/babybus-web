@@ -150,7 +150,7 @@
 <script setup lang="ts">
 const list = ref<any[]>([])
 const detail = ref<any>(null)
-const city = ref('370681')
+const city = ref('0631')
 const keyword = ref('1')
 const searchText = ref('')
 
@@ -167,7 +167,7 @@ const editForm = ref<any>({})
 async function loadList() {
 	loading.value = true
 	try {
-		const res = await $fetch<{ data: any; total: number }>('/api/buslines', {
+		const res = await request('/api/buslines', {
 			query: { keyword: searchText.value, page: page.value, pageSize: pageSize.value }
 		})
 		list.value = res.data ?? []
@@ -183,7 +183,7 @@ function onPageChange(p: number) {
 }
 
 async function fetchAndSave(keywords: string) {
-	const res: any = await $fetch('/api/mapApi/getBusmapList', {
+	const res: any = await request('/api/mapApi/getBusmapList', {
 		method: 'POST',
 		body: { city: city.value, keywords }
 	})
@@ -191,7 +191,7 @@ async function fetchAndSave(keywords: string) {
 	if (!lines.length) {
 		return { count: 0, skipped: 0 }
 	}
-	const saveRes = await $fetch<{ data: { count: number; skipped: number } }>(
+	const saveRes = await request(
 		'/api/buslines/save',
 		{ method: 'POST', body: lines }
 	)
@@ -206,7 +206,7 @@ async function fetchAndSave(keywords: string) {
 }
 
 async function showDetail(data: any) {
-	const res = await $fetch<{ data: any; code: number }>(`/api/buslines/${data.id}`)
+	const res = await request(`/api/buslines/${data.id}`)
 	detail.value = res.data
 }
 
@@ -223,7 +223,7 @@ function openEdit(data: any) {
 
 async function submitEdit() {
 	const { id, ...rest } = editForm.value
-	await $fetch(`/api/buslines/${id}`, {
+	await request(`/api/buslines/${id}`, {
 		method: 'PUT',
 		body: rest
 	})
@@ -241,8 +241,12 @@ async function removeLine(data: any) {
 	} catch {
 		return // 取消
 	}
-	await $fetch(`/api/buslines/${data.id}`, { method: 'DELETE' })
-	ElMessage.success('删除成功')
+	const res = await request(`/api/buslines/${data.id}`, { method: 'DELETE' })
+	if(res && res.code == 200){
+		ElMessage.success('删除成功')
+	} else {
+		ElMessage.error('删除失败')
+	}
 	if (detail.value?.id === data.id) detail.value = null
 	loadList()
 }
@@ -304,7 +308,7 @@ function formatInterval(t: string): string {
 
 // ---- 循环拉取脚本任务 ----
 const LOOP_INTERVAL = 2000  // 每 1 秒一次
-const loopStart = ref('631')  // keyword 起始
+const loopStart = ref('344')  // keyword 起始
 const loopEnd = ref('999')  // keyword 截止
 
 const loopRunning = ref(false)
@@ -336,7 +340,7 @@ async function startLoopTask() {
 		loopCurrent.value = k
 		loopStats.value.total++
 		try {
-			const res: any = await $fetch('/api/mapApi/getBusmapList', {
+			const res: any = await request('/api/mapApi/getBusmapList', {
 				method: 'POST',
 				body: { city: city.value, keywords: String(k) } // city 取输入框值
 			})
@@ -350,7 +354,7 @@ async function startLoopTask() {
 				pushLog(`keyword=${k} 无数据`)
 				return
 			}
-			const saveRes = await $fetch<{ data: { count: number; skipped: number } }>(
+			const saveRes = await request(
 				'/api/buslines/save',
 				{ method: 'POST', body: lines }
 			)

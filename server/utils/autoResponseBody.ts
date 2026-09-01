@@ -15,7 +15,6 @@ class AutoResponseBodyClass {
                 return { checkedData: data, checkedCode: code, checkedMsg: msg }
         
             default:
-                console.log('e=========>', msg)
                 return { checkedData: data, checkedCode: 500, checkedMsg: `出现错误，请联系后台人员${msg}` }
         }
     }

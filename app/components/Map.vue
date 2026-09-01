@@ -645,7 +645,7 @@ async function loadData(keyword: string) {
 
     try {
         // 第 1 页：拿到总量 total
-        const first = await $fetch<{ data: BusLine[]; total: number; code: number }>("/api/buslines/map", {
+        const first = await request("/api/buslines/map", {
             query: { keyword, page: 1, pageSize: PAGE_SIZE },
         });
         const total = first.total || 0;
@@ -662,13 +662,13 @@ async function loadData(keyword: string) {
         for (let page = 1; page <= totalPages; page++) {
             const res = page === 1
                 ? first
-                : await $fetch<{ data: BusLine[]; total: number; code: number }>("/api/buslines/map", {
+                : await request("/api/buslines/map", {
                     query: { keyword, page, pageSize: PAGE_SIZE },
                 });
 
             const raw = res.data || [];
             // 为当前批分配颜色（颜色索引基于已累积数量，保证全局一致）
-            const colored = raw.map((line, i) => ({ ...line, color: PALETTE[(all.length + i) % PALETTE.length] }));
+            const colored = raw.map((line: any, i: any) => ({ ...line, color: PALETTE[(all.length + i) % PALETTE.length] }));
 
             // 完整数据（含反向，供切换反向使用）
             all = all.concat(colored);
@@ -734,6 +734,7 @@ onUnmounted(() => {
 .map-wrapper {
     position: relative;
     width: 100%;
+    height: 84vh;
 }
 
 .map {

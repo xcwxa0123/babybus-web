@@ -42,7 +42,8 @@ export default defineNuxtConfig({
       mapsc: '',
       busSearchKey: '',
       dbPath: '',
-      redisUrl: '' // Redis 连接地址，如 redis://localhost:6379
+      redisUrl: '', // Redis 连接地址，如 redis://localhost:6379
+      jwtSecret: '', 
     }
   }
 })

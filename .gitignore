@@ -26,3 +26,5 @@ logs
 
 pm2.config.cjs
 *.db*
+
+skills/*
