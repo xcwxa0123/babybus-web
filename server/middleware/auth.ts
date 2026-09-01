@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken'
 const PUBLIC_PATHS = [
     '/api/user/login',
-    '/api/user/register'
+    // '/api/user/register'
 ]
 const SECRET = useRuntimeConfig().public.jwtSecret as string
 
