@@ -349,6 +349,11 @@ async function startLoopTask() {
 				stopLoopTask()
 				return
 			}
+			if (res.code == '500') {
+				pushLog(`报错了捏${res.msg}，下次从${k}开始`)
+				stopLoopTask()
+				return
+			}
 			const lines = Array.isArray(res) ? res : res.buslines ?? []
 			if (!lines.length) {
 				pushLog(`keyword=${k} 无数据`)
