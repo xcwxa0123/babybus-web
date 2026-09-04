@@ -313,7 +313,7 @@ const loopEnd = ref('999')  // keyword 截止
 
 const loopRunning = ref(false)
 const loopCurrent = ref(0)      // 当前 keyword
-const loopStats = ref({ total: 0, inserted: 0, skipped: 0, failed: 0 })
+const loopStats = ref({ total: 0, inserted: 0, skipped: 0, failed: 0, sumFailed: 0})
 const loopLog = ref<string[]>([]) // 实时日志
 const loopTotalRange = ref(999)   // 总范围（用于进度条百分比）
 
@@ -331,7 +331,7 @@ async function startLoopTask() {
 	}
 
 	loopRunning.value = true
-	loopStats.value = { total: 0, inserted: 0, skipped: 0, failed: 0 }
+	loopStats.value = { total: 0, inserted: 0, skipped: 0, failed: 0, sumFailed: 0}
 	loopLog.value = []
 	loopCurrent.value = 0
 	loopTotalRange.value = rangeCount
@@ -350,10 +350,17 @@ async function startLoopTask() {
 				return
 			}
 			if (res.code == '500') {
-				pushLog(`报错了捏${res.msg}，下次从${k}开始`)
-				stopLoopTask()
-				return
+				loopStats.value.sumFailed++
+				if(loopStats.value.sumFailed >= 10){
+					pushLog(`第${loopStats.value.sumFailed}次报错了捏${res.msg}，停止`)
+					stopLoopTask()
+					return
+				}
+				pushLog(`报错了捏${res.msg}，5 秒后重试 keyword=${k}`)
+				await sleep(5000)
+				return runOne(k)   // 重试当前 k
 			}
+			loopStats.value.sumFailed = 0
 			const lines = Array.isArray(res) ? res : res.buslines ?? []
 			if (!lines.length) {
 				pushLog(`keyword=${k} 无数据`)
@@ -369,6 +376,7 @@ async function startLoopTask() {
 			pushLog(`keyword=${k} 返回${lines.length}条，入库${count}，跳过${skipped}`)
 		} catch (e: any) {
 			loopStats.value.failed++
+			loopStats.value.sumFailed = 0
 			pushLog(`keyword=${k} 失败：${e?.message ?? e}`)
 		}
 	}
