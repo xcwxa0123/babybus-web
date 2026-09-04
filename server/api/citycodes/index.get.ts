@@ -34,7 +34,7 @@ export default defineEventHandler((event) => {
     const { total } = db.prepare(`SELECT COUNT(*) AS total FROM city_codes ${where}`).get(...params) as any
 
     // 当前页数据
-    const rows = db.prepare(`SELECT * FROM city_codes ${where} ORDER BY citycode LIMIT ? OFFSET ?`)
+    const rows = db.prepare(`SELECT * FROM city_codes ${where} ORDER BY citycode IS NULL, citycode LIMIT ? OFFSET ?`)
       .all(...params, pageSize, (page - 1) * pageSize)
 
     return { data: rows, total, page, pageSize, code: 200, msg: 'ok' }
