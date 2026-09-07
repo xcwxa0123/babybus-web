@@ -8,16 +8,27 @@ export default defineEventHandler((event) => {
     const pageSize = Math.min(200, Math.max(1, Number(query.pageSize) || 20))
     const citycode = (query.citycode as string)?.trim()
 
+    const status = (query.status as string)?.trim()
+    let where = ''
+    const whereParts: string[] = []
+    const params: any[] = []
 
-    const where = citycode ? `WHERE citycode = ?` : ''
-    const params = []
-    if (citycode) {
-        params.push(citycode)
+    if(citycode){
+      whereParts.push('citycode LIKE ?')
+      params.push(`${citycode}%`)
     }
-    const { total } = db.prepare(`SELECT COUNT(*) AS total FROM done_num_citycode ${where}`).get(...params) as any
 
-    params.push(pageSize)
-    params.push((page - 1) * pageSize)
+    if (status) {
+      whereParts.push(`status = ?`)
+      params.push(status)
+    }
+
+    if (whereParts.length) {
+      where = `WHERE ${whereParts.join(' AND ')}`
+    }
+
+    const { total } = db.prepare(`SELECT COUNT(*) AS total FROM done_num_citycode ${where};`).get(...params) as any
+
     // 总数（用于分页）
 
     // 当前页数据
@@ -28,7 +39,7 @@ export default defineEventHandler((event) => {
         total_num AS totalNum, 
         updated_at AS updatedAt 
         FROM done_num_citycode ${where} ORDER BY citycode IS NULL, citycode LIMIT ? OFFSET ?`)
-    .all(...params)
+    .all(...params, pageSize, (page - 1) * pageSize)
 
     return { data: rows, total, page, pageSize, code: 200, msg: 'ok' }
   } catch (error) {

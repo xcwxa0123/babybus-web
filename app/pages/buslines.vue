@@ -20,7 +20,7 @@
 				<el-button type="warning" :disabled="loopRunning" @click="startLoopTask">
 					循环拉取脚本任务
 				</el-button>
-				<el-button v-if="loopRunning" type="danger" @click="stopLoopTask">停止</el-button>
+				<el-button v-if="loopRunning" type="danger" @click="() => { stopLoopTask(); stopClick = true }">停止</el-button>
 			</div>
 		</div>
 
@@ -168,7 +168,12 @@ async function loadList() {
 	loading.value = true
 	try {
 		const res = await request('/api/buslines', {
-			query: { keyword: searchText.value, page: page.value, pageSize: pageSize.value }
+			query: {
+				keyword: searchText.value,
+				citycode: city.value,
+				page: page.value,
+				pageSize: pageSize.value
+			}
 		})
 		list.value = res.data ?? []
 		total.value = res.total ?? 0
@@ -317,11 +322,11 @@ const loopStats = ref({ total: 0, inserted: 0, skipped: 0, failed: 0, sumFailed:
 const loopLog = ref<string[]>([]) // 实时日志
 const loopTotalRange = ref(999)   // 总范围（用于进度条百分比）
 
-let loopTimer: ReturnType<typeof setInterval> | null = null
+const stopClick = ref(false)
 
+// 所有的停止动作入库，停止后重新查询
 async function startLoopTask() {
 	if (loopRunning.value) return
-
 	const start = Number(loopStart.value) || 1
 	const end = Number(loopEnd.value) || 999
 	const rangeCount = Math.max(0, end - start + 1)
@@ -346,6 +351,9 @@ async function startLoopTask() {
 			})
 			if (res.status == '0' && res.infocode != '10000') {
 				pushLog(`到限额了捏，下次从${k}开始`)
+				// 保存当前 k 到数据库对应的city字段，在下次循环的时候会入库
+				loopStart.value = String(k)
+				stopClick.value = false   // 内部停优先，别再让 for 头覆盖
 				stopLoopTask()
 				return
 			}
@@ -353,12 +361,17 @@ async function startLoopTask() {
 				loopStats.value.sumFailed++
 				if(loopStats.value.sumFailed >= 10){
 					pushLog(`第${loopStats.value.sumFailed}次报错了捏${res.msg}，停止`)
+					loopStart.value = String(k)
+					stopClick.value = false   // 内部停优先，别再让 for 头覆盖
 					stopLoopTask()
 					return
 				}
 				pushLog(`报错了捏${res.msg}，5 秒后重试 keyword=${k}`)
+				// 随时点按钮终止
+				if (!loopRunning.value) return
 				await sleep(5000)
-				return runOne(k)   // 重试当前 k
+				if (!loopRunning.value) return
+				return runOne(k)
 			}
 			loopStats.value.sumFailed = 0
 			const lines = Array.isArray(res) ? res : res.buslines ?? []
@@ -383,7 +396,14 @@ async function startLoopTask() {
 
 	pushLog(`循环任务开始：city=${city.value}，keyword ${start}~${end}，间隔 ${LOOP_INTERVAL / 1000}s`)
 	for (let k = start; k <= end; k++) {
-		if (!loopRunning.value) break // 停止
+		if (!loopRunning.value) {
+			// 最后还没跑的index赋给start，同时存库里，意味着下次从该index直接开始
+			if(stopClick.value){
+				loopStart.value = String(k)
+				stopClick.value = false
+			}
+			break;
+		}
 		await runOne(k)
 		if (k < end && loopRunning.value) {
 			await sleep(LOOP_INTERVAL)
@@ -391,11 +411,17 @@ async function startLoopTask() {
 	}
 
 	if (loopRunning.value) {
+		loopStart.value = String(loopEnd.value)
 		pushLog('循环任务全部完成')
 	} else {
 		pushLog('循环任务已停止')
 	}
 	loopRunning.value = false
+	// 保存当前 k 到数据库对应的city字段
+	await request('/api/citycodes/saveDoneNum', {
+		method: 'POST',
+		body: { citycode: city.value, doneNum: loopStart.value, status: loopStart.value == loopEnd.value ? 2 : 1}
+	})
 	loadList()
 }
 
@@ -413,5 +439,23 @@ function sleep(ms: number) {
 	return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
-onMounted(loadList)
+async function loadNum(citycode = '') {
+	const res = await request('/api/citycodes/doneStatus', {
+		query: {
+			citycode,
+			status: 1,
+			page: 1,
+			pageSize: 20
+		}
+	})
+	if(res && res.code == 200 && res.data && res.data.length){
+		loopStart.value = res.data[0].doneNum
+		city.value= res.data[0].citycode
+	}
+}
+
+onMounted(async () => {
+	await loadNum()
+	await loadList()
+})
 </script>

@@ -3,6 +3,7 @@ export default defineEventHandler((event) => {
     const db = getDb()
     const query = getQuery(event)
     const keyword = (query.keyword as string)?.trim()
+    const citycode = (query.citycode as string)?.trim()
 
     // 分页参数（默认 page=1, pageSize=20，最多 200）
     const page = Math.max(1, Number(query.page) || 1)
@@ -10,12 +11,20 @@ export default defineEventHandler((event) => {
 
     // 支持按线路名 / 首发站 / 末站模糊搜索
     let where = ''
+    const whereParts: string[] = []
     const params: any[] = []
     if (keyword) {
-      where = ` WHERE name LIKE ? OR start_stop LIKE ? OR end_stop LIKE ?`
-      const like = `%${keyword}%`
+      whereParts.push(`name LIKE ? OR start_stop LIKE ? OR end_stop LIKE ?`)
+      const like = `${keyword}%`
       params.push(like, like, like)
     }
+
+    if(citycode) {
+      whereParts.push(`citycode LIKE ?`)
+      params.push(`${citycode}%`)
+    }
+
+    where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
 
     // 总数（用于分页）
     const { total } = db.prepare(`SELECT COUNT(*) AS total FROM bus_lines ${where}`).get(...params) as any

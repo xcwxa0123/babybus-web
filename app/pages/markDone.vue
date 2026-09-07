@@ -1,14 +1,14 @@
 <template>
 	<div style="padding: 20px">
-		<h2>手动标记是否完成</h2>
+		<h2>标记页</h2>
 
 		<!-- 查询条件 -->
 		<div style="margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px">
 			<!-- <el-input v-model="filters.name" style="width: 180px" placeholder="按名称搜索" clearable
 				@keyup.enter="onSearch" @clear="onSearch" /> -->
-			<!-- <el-input v-model="filters.adcode" style="width: 150px" placeholder="按 adcode 搜索" clearable
-				@keyup.enter="onSearch" @clear="onSearch" /> -->
 			<el-input v-model="filters.citycode" style="width: 150px" placeholder="按 citycode 搜索" clearable
+				@keyup.enter="onSearch" @clear="onSearch" />
+			<el-input v-model="filters.status" style="width: 150px" placeholder="按 status 搜索" clearable
 				@keyup.enter="onSearch" @clear="onSearch" />
 			<el-button type="primary" @click="onSearch">查询</el-button>
 			<el-button @click="resetSearch">重置</el-button>
@@ -42,7 +42,8 @@
 				<el-form-item label="状态">
 					<el-select v-model="editForm.status" placeholder="完成状态">
 						<el-option :value="0" label="未完成" />
-						<el-option :value="1" label="已完成" />
+						<el-option :value="1" label="进行中" />
+						<el-option :value="2" label="已完成" />
 					</el-select>
 				</el-form-item>
 			</el-form>
@@ -76,14 +77,14 @@ const total = ref(0)
 const editDialog = ref(false)
 const editForm = ref<any>({})
 
-const filters = ref({ name: '', adcode: '', citycode: '' })
+const filters = ref({ status: '', citycode: '' })
 
 async function loadList() {
 	loading.value = true
 	try {
 		const res = await request('/api/citycodes/doneStatus', {
 			query: {
-				citycode: filters.value.citycode || undefined,
+				...filters.value,
 				page: page.value,
 				pageSize: pageSize.value
 			}
@@ -123,7 +124,7 @@ function onSearch() {
 }
 
 function resetSearch() {
-	filters.value = { name: '', adcode: '', citycode: '' }
+	filters.value = { status: '', citycode: '' }
 	page.value = 1
 	loadList()
 }

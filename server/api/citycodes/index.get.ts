@@ -17,15 +17,15 @@ export default defineEventHandler((event) => {
 
     if (name) {
       whereParts.push('name LIKE ?')
-      params.push(`%${name}%`)
+      params.push(`${name}%`)
     }
     if (adcode) {
       whereParts.push('adcode LIKE ?')
-      params.push(`%${adcode}%`)
+      params.push(`${adcode}%`)
     }
     if (citycode) {
       whereParts.push('citycode LIKE ?')
-      params.push(`%${citycode}%`)
+      params.push(`${citycode}%`)
     }
 
     const where = whereParts.length ? ` WHERE ${whereParts.join(' OR ')}` : ''
