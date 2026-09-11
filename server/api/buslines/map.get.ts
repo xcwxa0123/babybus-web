@@ -8,25 +8,27 @@ export default defineEventHandler(async (event) => {
   try {
     const db = getDb()
     const query = getQuery(event)
-    const keyword = (query.keyword as string)?.trim() || ''
+
+    // 城市编码（精确匹配，未传则不参与过滤）
+    const citycode = (query.citycode as string)?.trim() || ''
 
     // 分页参数（默认 page=1, pageSize=20）
     const page = Math.max(1, Number(query.page) || 1)
     const pageSize = Math.min(200, Math.max(1, Number(query.pageSize) || 20))
 
     // ---- Redis 缓存：命中直接返回 ----
-    const cacheKey = `map:${keyword || '*'}:${page}:${pageSize}`
+    const cacheKey = `map:${citycode || '*'}:${page}:${pageSize}`
     const cached = await redisGetJson(cacheKey)
     if (cached) {
       return cached
     }
 
-    // 支持按名称模糊匹配
+    // 只按 citycode 精确匹配过滤，未传则不拼进 where
     let where = ''
     const params: any[] = []
-    if (keyword) {
-      where = ` WHERE name LIKE ?`
-      params.push(`%${keyword}%`)
+    if (citycode) {
+      where = ` WHERE citycode = ?`
+      params.push(citycode)
     }
 
     // 总量（用于进度条和分页）

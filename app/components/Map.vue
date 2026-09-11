@@ -9,6 +9,7 @@
                     </el-input>
                 </template>
                 <el-button class="search-btn" @click="reload" v-if="!sidebarCollapsed"><el-icon><Search /></el-icon></el-button>
+                <el-button class="search-btn" @click="reloadAll" v-if="!sidebarCollapsed" title="全量查询（耗时较长）">全</el-button>
                 <el-button class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed"
                     :title="sidebarCollapsed ? '展开' : '收起'">
                     <el-icon v-if="sidebarCollapsed"><ArrowLeft /></el-icon>
@@ -45,6 +46,7 @@
 
         <!-- 加载进度条（地图先展示，数据分批渲染时实时推进） -->
         <div v-if="loading" class="map-loading-bar">
+            <button class="loading-close" title="关闭并终止加载" @click="stopLoad">×</button>
             <div class="loading-info">
                 <span class="loading-text">正在加载线路数据</span>
                 <span class="loading-percent">{{ progress }}%</span>
@@ -168,7 +170,7 @@ const allLines = ref<BusLine[]>([]); // 完整数据（含反向，供切换反�
 const activeId = ref<string | null>(null);
 const sidebarCollapsed = ref(false);
 const bottombarCollapsed = ref(false);
-const loading = ref(true);
+const loading = ref(false);
 const loadError = ref("");
 const progress = ref(0); // 分批加载进度（0-100）
 const totalLines = ref(0); // 总线路数
@@ -636,7 +638,32 @@ function dedupeLines(data: BusLine[]): BusLine[] {
 // 拉取并渲染线路数据（分批加载 + 实时进度条）
 const PAGE_SIZE = 40; // 每批线路数
 
-async function loadData(keyword: string) {
+// 先用 keyword 去 city_codes 表查 citycode（查不到返回空串，后续不作为过滤条件）
+async function resolveCitycode(keyword: string): Promise<string> {
+    const kw = keyword.trim();
+    if (!kw) return "";
+    try {
+        const res = await request("/api/citycodes", {
+            query: { name: kw, page: 1, pageSize: 1 },
+        });
+        return res?.data?.[0]?.citycode || "";
+    } catch {
+        return "";
+    }
+}
+
+// 每次发起加载时自增；进行中的旧任务发现 token 变化后自行中止（即终止轮询）
+let loadToken = 0;
+
+// 关闭进度条并终止进行中的分页轮询
+function stopLoad() {
+    loadToken++;
+    loading.value = false;
+    progress.value = 0;
+}
+
+async function loadData(keyword: string, full = false) {
+    const token = ++loadToken; // 取号，旧任务自动失效
     loading.value = true;
     loadError.value = "";
     progress.value = 0;
@@ -644,10 +671,19 @@ async function loadData(keyword: string) {
     clearMapLayers();
 
     try {
+        // 全量模式跳过城市解析；普通搜索必须能解析出 citycode
+        const citycode = full ? "" : await resolveCitycode(keyword);
+        if (token !== loadToken) return; // 解析期间已被中止
+        if (!full && !citycode) {
+            loadError.value = keyword.trim() ? "未找到该城市，请检查关键词" : "请输入城市关键词";
+            return;
+        }
+
         // 第 1 页：拿到总量 total
         const first = await request("/api/buslines/map", {
-            query: { keyword, page: 1, pageSize: PAGE_SIZE },
+            query: { citycode: citycode || undefined, page: 1, pageSize: PAGE_SIZE },
         });
+        if (token !== loadToken) return;
         const total = first.total || 0;
         totalLines.value = total;
         if (!total) {
@@ -660,11 +696,13 @@ async function loadData(keyword: string) {
         let loaded = 0;
 
         for (let page = 1; page <= totalPages; page++) {
+            if (token !== loadToken) return; // 用户关闭进度条 / 发起新查询 → 终止轮询
             const res = page === 1
                 ? first
                 : await request("/api/buslines/map", {
-                    query: { keyword, page, pageSize: PAGE_SIZE },
+                    query: { citycode: citycode || undefined, page, pageSize: PAGE_SIZE },
                 });
+            if (token !== loadToken) return;
 
             const raw = res.data || [];
             // 为当前批分配颜色（颜色索引基于已累积数量，保证全局一致）
@@ -690,16 +728,33 @@ async function loadData(keyword: string) {
 
         map.setFitView();
     } catch (e) {
-        loadError.value = "线路数据加载失败，请稍后重试";
+        if (token === loadToken) loadError.value = "线路数据加载失败，请稍后重试";
     } finally {
-        progress.value = 100;
-        loading.value = false;
+        if (token === loadToken) {
+            progress.value = 100;
+            loading.value = false;
+        }
     }
 }
 
+// 普通搜索：必须有关键词且能匹配到城市
 function reload() {
-    const keyword = keywordInput.value.trim();
-    loadData(keyword);
+    loadData(keywordInput.value.trim());
+}
+
+// 全量查询：二次确认（耗时很长），citycode 传空即拉取全库线路
+async function reloadAll() {
+    try {
+        await ElMessageBox.confirm(
+            "全量查询会拉取库内所有城市的线路，所需时间很长，确定继续吗？",
+            "提示",
+            { type: "warning", confirmButtonText: "继续", cancelButtonText: "取消" }
+        );
+    } catch {
+        return; // 取消
+    }
+    keywordInput.value = "";
+    loadData("", true);
 }
 
 // 初始化地图（仅创建一次）
@@ -721,12 +776,19 @@ async function initMap() {
     // 点击地图：命中线路则选中；多条线路时弹候选
     map.on("click", onMapClick);
 
-    await loadData(keywordInput.value);
+    // await loadData(keywordInput.value);
 }
 
 onMounted(initMap);
+
 onUnmounted(() => {
+    stopLoad(); // 卸载时先终止分页轮询
     map?.destroy();
+});
+
+// 路由离开（如切到其他页面）时也终止轮询
+onBeforeRouteLeave(() => {
+    stopLoad();
 });
 </script>
 
@@ -757,6 +819,30 @@ onUnmounted(() => {
     padding: 10px 14px;
     backdrop-filter: blur(4px);
     pointer-events: none;
+}
+/* 进度条右上角关闭按钮：关闭进度条并终止轮询 */
+.loading-close {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: #f56c6c;
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    pointer-events: auto; /* 父级 pointer-events: none，需单独开启 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.loading-close:hover {
+    background: #f78989;
 }
 .loading-info {
     display: flex;

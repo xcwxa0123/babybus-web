@@ -458,4 +458,17 @@ onMounted(async () => {
 	await loadNum()
 	await loadList()
 })
+
+// 页面卸载 / 路由离开时先终止循环轮询，避免请求还在后台继续跑
+function stopLoopOnLeave() {
+	if (!loopRunning.value) return
+	stopClick.value = true // 交给 for 头把当前 k 记为断点
+	stopLoopTask()
+}
+
+onUnmounted(stopLoopOnLeave)
+
+onBeforeRouteLeave(() => {
+	stopLoopOnLeave()
+})
 </script>
