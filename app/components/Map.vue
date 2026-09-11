@@ -4,12 +4,12 @@
         <div class="panel" :class="{ collapsed: sidebarCollapsed, detailOpen: isDetailExpanded }">
             <div class="panel-header">
                 <template v-if="!sidebarCollapsed">
-                    <el-input v-model="keywordInput" size="default" placeholder="搜索线路，如：龙口" clearable
+                    <el-input v-model="keywordInput" size="default" placeholder="请输入城市名字" clearable
                         @keyup.enter="reload">
                     </el-input>
                 </template>
                 <el-button class="search-btn" @click="reload" v-if="!sidebarCollapsed"><el-icon><Search /></el-icon></el-button>
-                <el-button class="search-btn" @click="reloadAll" v-if="!sidebarCollapsed" title="全量查询（耗时较长）">全</el-button>
+                <el-button class="search-btn" @click="reloadAll" v-if="!sidebarCollapsed" title="全量查询（耗时较长）" style="margin-left: 0;">全</el-button>
                 <el-button class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed"
                     :title="sidebarCollapsed ? '展开' : '收起'">
                     <el-icon v-if="sidebarCollapsed"><ArrowLeft /></el-icon>
@@ -169,7 +169,7 @@ const lines = ref<BusLine[]>([]); // 渲染列表（去重后的正向线路）
 const allLines = ref<BusLine[]>([]); // 完整数据（含反向，供切换反向使用）
 const activeId = ref<string | null>(null);
 const sidebarCollapsed = ref(false);
-const bottombarCollapsed = ref(false);
+const bottombarCollapsed = ref(true);
 const loading = ref(false);
 const loadError = ref("");
 const progress = ref(0); // 分批加载进度（0-100）
@@ -830,8 +830,8 @@ onBeforeRouteLeave(() => {
     padding: 0;
     border: none;
     border-radius: 50%;
-    background: #f56c6c;
-    color: #fff;
+    background: #fff;
+    color: #606266;
     font-size: 14px;
     line-height: 1;
     cursor: pointer;
@@ -842,7 +842,7 @@ onBeforeRouteLeave(() => {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 .loading-close:hover {
-    background: #f78989;
+    background: #f0f2f5;
 }
 .loading-info {
     display: flex;

@@ -68,6 +68,7 @@ function initTables(database: Database.Database) {
             PRIMARY KEY (bus_id, stop_id, seq)
         );
         CREATE INDEX IF NOT EXISTS idx_seq_bus ON bus_stop_sequences (bus_id, seq);
+        CREATE INDEX IF NOT EXISTS idx_bus_lines_citycode_name ON bus_lines (citycode, name);
 
         -- 高德城市编码表（name / adcode / citycode 对照）
         CREATE TABLE IF NOT EXISTS city_codes (
@@ -118,7 +119,7 @@ function initTables(database: Database.Database) {
             citycode   TEXT PRIMARY KEY,
             done_num   INTEGER NOT NULL DEFAULT 0,   -- 已爬取的 index
             total_num  INTEGER NOT NULL DEFAULT 999, -- 本次任务总目标（可配置）
-            status     INTEGER NOT NULL DEFAULT 0,   -- 0: 爬取中, 1: 已完成
+            status     INTEGER NOT NULL DEFAULT 0,   -- 0: 爬取中, 1: 进行中, 2: 已完成
             updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         );
 

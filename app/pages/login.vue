@@ -27,11 +27,11 @@
 
                     <div class="left-stats">
                         <div class="stat-item">
-                            <div class="stat-num">12,400+</div>
+                            <div class="stat-num">{{ total }}</div>
                             <div class="stat-lbl">收录公交线路</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-num">10</div>
+                            <div class="stat-num">{{ adcodeCount }}</div>
                             <div class="stat-lbl">收录城市</div>
                         </div>
                         <div class="stat-item">
@@ -175,10 +175,17 @@
 </template>
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
+import { useRouter } from 'vue-router';
+
+const router = useRouter()
+
 const authStore = useAuthStore();
 const activeTab = ref('login');
 const loading = ref(false);
 const remember = ref(true);
+
+const total = ref(0)
+const adcodeCount = ref(0)
 
 const loginForm = reactive({ userName: '', password: '' });
 const regForm = reactive({ nickname: '', email: '', password: '', confirm: '', userName: '' });
@@ -209,6 +216,7 @@ const doLogin = async () => {
         authStore.login(res.data.token)
         authStore.setUserInfo(res.data.user)
         ElMessage({ message: '登录成功，正在跳转…', type: 'success', duration: 1200 });
+        router.push({ path: '/buslines' })
     } else {
         ElMessage({ message: `登录失败捏！${ res.msg }`, type: 'error', duration: 1500 });
     }
@@ -249,6 +257,14 @@ const doRegister = async () => {
     // setTimeout(() => {
     // }, 1600);
 };
+const setNum = async () => {
+    const numRes: any = await request('/api/buslines/getIndexNum', { method: 'GET' })
+    if(numRes.code == 200){
+        total.value = numRes.data.total
+        adcodeCount.value = numRes.data.adcodeCount
+    }
+}
+setNum()
 </script>
 <style>
 .page-container{
