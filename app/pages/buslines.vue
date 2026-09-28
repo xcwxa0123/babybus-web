@@ -187,10 +187,10 @@ function onPageChange(p: number) {
 	loadList()
 }
 
-async function fetchAndSave(keywords: string) {
+async function fetchAndSave(keywords: string, page: number = 1) {
 	const res: any = await request('/api/mapApi/getBusmapList', {
 		method: 'POST',
-		body: { city: city.value, keywords }
+		body: { city: city.value, keywords, page},
 	})
 	const lines = Array.isArray(res) ? res : res.buslines ?? []
 	if (!lines.length) {
@@ -205,6 +205,11 @@ async function fetchAndSave(keywords: string) {
 		ElMessage.info(`本次返回 ${lines.length} 条，实际入库 ${count} 条，跳过已有 ${skipped} 条`)
 	} else {
 		ElMessage.success(`已入库 ${count} 条线路`)
+	}
+	// 这里增加逻辑，用count % 50 的向上取整值，看page是不是大于，如果大于就不跑了，否则跑fetchAndSave()
+	if(page + 1 <= Math.ceil(res.count / 50)){
+		await sleep(LOOP_INTERVAL)   // 翻页之间也要间隔，否则容易触发高德限额
+		return fetchAndSave(keywords, page + 1)
 	}
 	loadList()
 	return { count, skipped }
@@ -341,13 +346,13 @@ async function startLoopTask() {
 	loopCurrent.value = 0
 	loopTotalRange.value = rangeCount
 
-	const runOne = async (k: number) => {
+	const runOne = async (k: number, page: number = 1) => {
 		loopCurrent.value = k
 		loopStats.value.total++
 		try {
 			const res: any = await request('/api/mapApi/getBusmapList', {
 				method: 'POST',
-				body: { city: city.value, keywords: String(k) } // city 取输入框值
+				body: { city: city.value, keywords: String(k), page } // city 取输入框值
 			})
 			if (res.status == '0' && res.infocode != '10000') {
 				pushLog(`到限额了捏，下次从${k}开始`)
@@ -371,7 +376,7 @@ async function startLoopTask() {
 				if (!loopRunning.value) return
 				await sleep(5000)
 				if (!loopRunning.value) return
-				return runOne(k)
+				return runOne(k, page)
 			}
 			loopStats.value.sumFailed = 0
 			const lines = Array.isArray(res) ? res : res.buslines ?? []
@@ -387,6 +392,14 @@ async function startLoopTask() {
 			loopStats.value.inserted += count
 			loopStats.value.skipped += skipped
 			pushLog(`keyword=${k} 返回${lines.length}条，入库${count}，跳过${skipped}`)
+			// 这里增加逻辑，用count % 50 的向上取整值，看page是不是大于，如果大于就不跑了，否则跑runOne()
+			if(page + 1 <= Math.ceil(res.count / 50)){
+				if (!loopRunning.value) return
+				await sleep(LOOP_INTERVAL)   // 翻页之间也要间隔，否则容易触发高德限额
+				if (!loopRunning.value) return
+				return runOne(k, page + 1)
+			}
+
 		} catch (e: any) {
 			loopStats.value.failed++
 			loopStats.value.sumFailed = 0
