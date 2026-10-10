@@ -77,7 +77,11 @@
 		<section class="panel table-panel">
 			<el-table v-loading="loading" :data="list" :row-class-name="rowClass" @row-click="showDetail">
 				<template #empty>
-					<div class="empty">没有找到线路。填写关键词后点击「拉取并入库」，或调整查询条件。</div>
+					<div class="empty">
+						<div class="empty-icon"></div>
+						<div class="empty-title">没有找到线路</div>
+						<div class="empty-sub">填写关键词后点击「拉取并入库」，或调整查询条件试试</div>
+					</div>
 				</template>
 				<el-table-column prop="name" label="线路名" min-width="140" fixed show-overflow-tooltip>
 					<template #default="{ row }">
@@ -126,10 +130,10 @@
 				<el-table-column prop="bounds" label="矩形区域" min-width="180" show-overflow-tooltip />
 				<el-table-column prop="polyline" label="坐标串" min-width="180" show-overflow-tooltip />
 				<el-table-column prop="created_at" label="创建时间" width="170" />
-				<el-table-column label="操作" width="90" fixed="right">
+				<el-table-column label="操作" width="150" fixed="right">
 					<template #default="{ row }">
-						<!-- <el-button size="small" @click.stop="openEdit(row)">编辑</el-button> -->
-						<el-button size="small" type="danger" text @click.stop="removeLine(row)">删除</el-button>
+						<el-button size="small" @click.stop="openEdit(row)">编辑</el-button>
+						<el-button size="small" type="danger" @click.stop="removeLine(row)">删除</el-button>
 					</template>
 				</el-table-column>
 			</el-table>
@@ -166,7 +170,7 @@
 		</section>
 
 		<!-- 编辑弹窗 -->
-		<el-dialog v-model="editDialog" class="bl-dialog" title="编辑线路" width="600px">
+		<el-dialog v-model="editDialog" class="app-dialog" title="编辑线路" width="600px">
 			<el-form :model="editForm" label-width="90px">
 				<el-form-item label="线路名"><el-input v-model="editForm.name" /></el-form-item>
 				<el-form-item label="类型"><el-input v-model="editForm.type" /></el-form-item>

@@ -29,7 +29,11 @@
 		<section class="panel table-panel">
 			<el-table v-loading="loading" :data="list">
 				<template #empty>
-					<div class="empty">没有找到记录。调整查询条件后重试。</div>
+					<div class="empty">
+						<div class="empty-icon"></div>
+						<div class="empty-title">没有找到记录</div>
+						<div class="empty-sub">调整 citycode 或 status 条件后重试</div>
+					</div>
 				</template>
 				<el-table-column label="citycode" width="110">
 					<template #default="{ row }">
@@ -49,7 +53,7 @@
 				<el-table-column prop="updatedAt" label="更新时间" min-width="170" />
 				<el-table-column label="操作" width="90">
 					<template #default="{ row }">
-						<el-button size="small" type="primary" text @click.stop="openEdit(row)">编辑</el-button>
+						<el-button size="small" @click.stop="openEdit(row)">编辑</el-button>
 					</template>
 				</el-table-column>
 			</el-table>
@@ -65,8 +69,8 @@
 			</ClientOnly>
 		</div>
 
-		<!-- 编辑弹窗（复用全局 .bl-dialog 样式：圆角卡片 + 主题变量） -->
-		<el-dialog v-model="editDialog" class="bl-dialog" title="编辑标记" width="600px">
+		<!-- 编辑弹窗（复用全局 .app-dialog 公共样式） -->
+		<el-dialog v-model="editDialog" class="app-dialog" title="编辑标记" width="600px">
 			<el-form :model="editForm" label-width="90px">
 				<el-form-item label="当前index"><el-input v-model="editForm.doneNum" /></el-form-item>
 				<el-form-item label="状态">
@@ -154,5 +158,5 @@ function resetSearch() {
 	loadList()
 }
 
-onMounted(loadList)
+// onMounted(loadList)
 </script>

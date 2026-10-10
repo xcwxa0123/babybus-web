@@ -14,6 +14,7 @@
     --rose-accent: #b86060;
     --shadow-sm: 0 2px 12px rgba(100, 80, 40, 0.06);
     --shadow-md: 0 6px 28px rgba(100, 80, 40, 0.09);
+    --shadow-lg: 0 16px 48px rgba(100, 80, 40, 0.12);
 }
 
 * {
@@ -181,11 +182,12 @@ footer {
    必须挂在页面根类命名空间下，不能裸全局化。 */
 
 /* Element Plus 主题变量：对齐全局色板。
-   弹窗/气泡会挂到 body，因此 .bl-dialog / .bl-popper 单独声明一份 */
+   弹窗/气泡/MessageBox 会挂到 body，因此 .app-dialog / .bl-popper / .el-message-box 单独声明一份 */
 .buslines,
 .markdone,
 .citycodes,
-.bl-dialog,
+.app-dialog,
+.el-message-box,
 .bl-popper {
     --bl-sage: #55805b;
     --bl-ochre: #a9701f;
@@ -238,16 +240,146 @@ footer {
     --el-font-family: 'Noto Sans SC', sans-serif;
 }
 
-/* 弹窗（buslines / markDone 编辑弹窗共用 .bl-dialog） */
-.bl-dialog {
-    border-radius: 16px;
-    box-shadow: var(--shadow-md);
+/* 弹窗（各数据页编辑弹窗通用，挂 .app-dialog）
+   注意：EP 2.13 把 padding / border-radius 放在 .el-dialog 根元素上，
+   且 EP 样式在 main.css 之后加载，必须用 .el-dialog.app-dialog 提升特异性接管，
+   否则根元素内边距会把头部背景顶出白边、圆角也会回落到 EP 默认的 4px */
+.el-dialog.app-dialog {
+    --el-dialog-padding-primary: 0;
+    --el-dialog-border-radius: 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
 }
 
-.bl-dialog .el-dialog__title {
+/* 头部：与 body 同一张纸，仅靠发丝分割线 + 衬线标题 + 圆点分区 */
+.app-dialog .el-dialog__header {
+    margin: 0;
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
+}
+
+.app-dialog .el-dialog__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     font-family: 'Noto Serif SC', serif;
+    font-size: 17px;
     font-weight: 700;
     letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.app-dialog .el-dialog__title::before {
+    content: '';
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sky-accent);
+}
+
+/* 关闭按钮：圆形悬浮态 */
+.app-dialog .el-dialog__headerbtn {
+    top: 14px;
+    right: 14px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    transition: background 0.2s ease;
+}
+
+.app-dialog .el-dialog__headerbtn:hover {
+    background: var(--cream-dark);
+}
+
+.app-dialog .el-dialog__headerbtn .el-dialog__close {
+    color: var(--ink-light);
+    font-size: 16px;
+}
+
+.app-dialog .el-dialog__headerbtn:hover .el-dialog__close {
+    color: var(--sky-accent);
+}
+
+/* 内容区 / 底部按钮区 */
+.app-dialog .el-dialog__body {
+    padding: 22px 24px 8px;
+}
+
+.app-dialog .el-dialog__footer {
+    padding: 14px 24px 20px;
+    border-top: 1px solid rgba(180, 160, 120, 0.12);
+}
+
+/* 表单标签 */
+.app-dialog .el-form-item__label {
+    font-size: 13px;
+    color: var(--ink-mid);
+}
+
+/* ── 确认弹窗（ElMessageBox，删除确认等，全局生效） ──
+   同 .app-dialog：EP 样式在 main.css 之后加载，
+   变量与内部结构覆写需用 .el-overlay 前缀提升特异性 */
+.el-overlay .el-message-box {
+    --el-messagebox-width: 420px;
+    --el-messagebox-border-radius: 16px;
+    --el-messagebox-box-shadow: var(--shadow-lg);
+    --el-messagebox-padding-primary: 16px;
+}
+
+/* 标题：衬线 + 圆点，与 .app-dialog 呼应 */
+.el-overlay .el-message-box .el-message-box__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.el-overlay .el-message-box .el-message-box__title::before {
+    content: '';
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sky-accent);
+}
+
+/* 带状态图标（警告/成功等）时不再叠加圆点 */
+.el-overlay .el-message-box .el-message-box__title:has(.el-message-box__status)::before {
+    display: none;
+}
+
+.el-overlay .el-message-box .el-message-box__content {
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+/* 按钮收成胶囊形，与整站按钮语言一致 */
+.el-overlay .el-message-box .el-message-box__btns .el-button {
+    border-radius: 999px;
+    padding: 8px 20px;
+}
+
+/* 头部关闭按钮：圆形热区 + 悬浮态 */
+.el-overlay .el-message-box .el-message-box__headerbtn {
+    top: 12px;
+    right: 12px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    transition: background 0.2s ease;
+}
+
+.el-overlay .el-message-box .el-message-box__headerbtn:hover {
+    background: var(--cream-dark);
+}
+
+.el-overlay .el-message-box .el-message-box__headerbtn:hover .el-message-box__close {
+    color: var(--sky-accent);
 }
 
 /* ── 页面骨架 ── */
@@ -401,6 +533,16 @@ footer {
     letter-spacing: 0.5px;
 }
 
+/* 表头/单元格居中（三页共用） */
+.buslines .table-panel .el-table th.el-table__cell,
+.markdone .table-panel .el-table th.el-table__cell,
+.citycodes .table-panel .el-table th.el-table__cell,
+.buslines .table-panel .el-table td.el-table__cell,
+.markdone .table-panel .el-table td.el-table__cell,
+.citycodes .table-panel .el-table td.el-table__cell {
+    text-align: center;
+}
+
 .buslines .line-name,
 .markdone .line-name,
 .citycodes .line-name {
@@ -408,12 +550,63 @@ footer {
     color: var(--ink);
 }
 
+/* ── 空态（三页共用）：虚线圆巴士图标 + 衬线标题 + 浅色提示 ── */
 .buslines .empty,
 .markdone .empty,
 .citycodes .empty {
-    padding: 28px 0;
-    font-size: 13px;
+    padding: 44px 16px 40px;
+    text-align: center;
+    line-height: 1.7;
+}
+
+.empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 14px;
+    border-radius: 50%;
+    background-color: var(--cream-dark);
+    background-image: url('../img/empty-bus.svg');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 34px auto;
+    border: 1px dashed var(--sky-mid);
+}
+
+.empty-title {
+    margin-bottom: 6px;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--ink);
+}
+
+.empty-sub {
+    font-size: 12px;
     color: var(--ink-light);
+}
+
+/* 空态文案占满表格宽度（EP 默认 .el-table__empty-text 只有 50% 宽） */
+.buslines .table-panel .el-table .el-table__empty-text,
+.markdone .table-panel .el-table .el-table__empty-text,
+.citycodes .table-panel .el-table .el-table__empty-text {
+    width: 100%;
+}
+
+/* 空态块首屏即居中：EP 要等挂载后才用 JS 把测量出的表格宽度内联到
+   .el-table__empty-block 上，SSR 首帧该值为空、块收缩成内容宽导致贴左。
+   把 body-wrapper 声明为查询容器后，空态块用 cqw 首帧即等于可视宽度，
+   与 EP 挂载后内联的 px 值一致，无需覆盖它的内联样式 */
+.buslines .table-panel .el-table .el-table__body-wrapper,
+.markdone .table-panel .el-table .el-table__body-wrapper,
+.citycodes .table-panel .el-table .el-table__body-wrapper {
+    container-type: inline-size;
+}
+
+.buslines .table-panel .el-table .el-table__empty-block,
+.markdone .table-panel .el-table .el-table__empty-block,
+.citycodes .table-panel .el-table .el-table__empty-block {
+    min-width: 100cqw;
 }
 
 /* 状态徽章基础样式（buslines / markDone 共用，各状态色见各自页面 css） */

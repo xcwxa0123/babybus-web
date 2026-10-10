@@ -31,7 +31,11 @@
 		<section class="panel table-panel">
 			<el-table v-loading="loading" :data="list">
 				<template #empty>
-					<div class="empty">没有找到记录。调整查询条件后重试。</div>
+					<div class="empty">
+						<div class="empty-icon"></div>
+						<div class="empty-title">没有找到记录</div>
+						<div class="empty-sub">调整名称、adcode 或 citycode 条件后重试</div>
+					</div>
 				</template>
 				<el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip>
 					<template #default="{ row }">
