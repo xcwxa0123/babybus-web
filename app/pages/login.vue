@@ -266,11 +266,3 @@ const setNum = async () => {
 }
 setNum()
 </script>
-<style>
-.page-container{
-    display: flex;
-    flex-direction: row;
-    /* height: 800px; */
-    min-height: 84vh
-}
-</style>

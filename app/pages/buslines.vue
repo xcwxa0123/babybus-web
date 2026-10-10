@@ -1,108 +1,142 @@
 <template>
-	<div style="padding: 20px">
-		<h2>公交线路本地库</h2>
-
-		<!-- 拉取入库 + 搜索 -->
-		<div style="margin-bottom: 12px">
-			<el-input v-model="city" style="width: 130px; margin-right: 8px" placeholder="citycode" />
-			<el-input v-model="keyword" style="width: 130px; margin-right: 8px" placeholder="线路关键词" />
-			<el-button type="primary" @click="fetchAndSave(keyword)">拉取并入库</el-button>
-			<el-input v-model="searchText" style="width: 180px; margin: 0 8px" placeholder="搜索线路/站点" clearable
-				@keyup.enter="onSearch" @clear="onSearch" />
-			<el-button type="success" @click="onSearch">查询</el-button>
-			<el-button @click="loadList">刷新列表</el-button>
-			<br style="clear: both" />
-			<div style="margin-top: 8px; display: flex; align-items: center; gap: 8px">
-				<span style="font-size: 13px">循环任务:</span>
-				<el-input v-model="loopStart" style="width: 100px" placeholder="起始keyword" />
-				<span>~</span>
-				<el-input v-model="loopEnd" style="width: 100px" placeholder="截止keyword" />
-				<el-button type="warning" :disabled="loopRunning" @click="startLoopTask">
-					循环拉取脚本任务
-				</el-button>
-				<el-button v-if="loopRunning" type="danger" @click="() => { stopLoopTask(); stopClick = true }">停止</el-button>
+	<div class="buslines">
+		<!-- 页面标题（注意：不要用 <header>，全局 index.css 里 header 是吸顶栏样式） -->
+		<div class="page-head">
+			<div class="page-title-wrap">
+				<h2 class="page-title"><span class="logo-dot" />公交线路本地库</h2>
+				<span class="logo-en">Local bus line library</span>
 			</div>
+			<p class="page-meta">共 {{ total }} 条线路，城市 {{ city }}</p>
 		</div>
 
-		<!-- 循环拉取脚本任务进度 -->
-		<el-card v-if="loopRunning || loopStats.total > 0" style="margin-top: 16px">
-			<template #header>
-				<div style="display: flex; justify-content: space-between; align-items: center">
-					<b>循环拉取脚本任务（city={{ city }}，keyword {{ loopStart }}~{{ loopEnd }}）</b>
-					<el-tag :type="loopRunning ? 'warning' : 'success'">
-						{{ loopRunning ? `执行中 keyword=${loopCurrent}` : '已结束' }}
-					</el-tag>
+		<!-- 操作区：拉取入库 / 查询 / 循环拉取 -->
+		<section class="panel tools">
+			<div class="tool-row">
+				<div class="tool-name">拉取入库<span>按关键词获取线路并保存</span></div>
+				<div class="tool-fields">
+					<el-input v-model="city" class="w-sm" placeholder="citycode" />
+					<el-input v-model="keyword" class="w-sm" placeholder="线路关键词" />
+					<el-button type="primary" @click="fetchAndSave(keyword)">拉取并入库</el-button>
 				</div>
-			</template>
-
-			<el-progress :percentage="Math.min(100, Math.round((loopCurrent / loopTotalRange) * 100))"
-				:status="loopRunning ? '' : 'success'" style="margin-bottom: 8px" />
-			<div style="margin-bottom: 8px">
-				<el-tag>总请求 {{ loopStats.total }}</el-tag>
-				<el-tag type="success" style="margin-left: 6px">已入库 {{ loopStats.inserted }}</el-tag>
-				<el-tag type="warning" style="margin-left: 6px">跳过已有 {{ loopStats.skipped }}</el-tag>
-				<el-tag type="danger" style="margin-left: 6px">失败 {{ loopStats.failed }}</el-tag>
 			</div>
 
-			<el-scrollbar max-height="220px">
-				<div v-for="(line, i) in loopLog" :key="i" style="font-size: 12px; line-height: 1.8">
-					{{ line }}
+			<div class="tool-row">
+				<div class="tool-name">查询<span>搜索线路或站点</span></div>
+				<div class="tool-fields">
+					<el-input v-model="searchText" class="w-lg" placeholder="搜索线路/站点" clearable
+						@keyup.enter="onSearch" @clear="onSearch" />
+					<el-button type="primary" plain @click="onSearch">查询</el-button>
+					<el-button @click="loadList">刷新列表</el-button>
 				</div>
-			</el-scrollbar>
-		</el-card>
+			</div>
+
+			<div class="tool-row">
+				<div class="tool-name">循环拉取<span>按 keyword 区间依次拉取</span></div>
+				<div class="tool-fields">
+					<el-input v-model="loopStart" class="w-xs" placeholder="起始keyword" />
+					<span class="range-sep">~</span>
+					<el-input v-model="loopEnd" class="w-xs" placeholder="截止keyword" />
+					<el-button type="warning" :disabled="loopRunning" @click="startLoopTask">
+						循环拉取脚本任务
+					</el-button>
+					<el-button v-if="loopRunning" type="danger" plain
+						@click="() => { stopLoopTask(); stopClick = true }">停止</el-button>
+				</div>
+			</div>
+		</section>
+
+		<!-- 循环拉取脚本任务进度 -->
+		<section v-if="loopRunning || loopStats.total > 0" class="panel run">
+			<div class="run-head">
+				<div>
+					<div class="run-title">循环拉取进度</div>
+					<div class="run-sub">city={{ city }}，keyword {{ loopStart }}~{{ loopEnd }}</div>
+				</div>
+				<el-tag :type="loopRunning ? 'warning' : 'success'" effect="light" round>
+					{{ loopRunning ? `执行中 keyword=${loopCurrent}` : '已结束' }}
+				</el-tag>
+			</div>
+
+			<el-progress :percentage="loopPercent" :stroke-width="8" :status="loopRunning ? '' : 'success'" />
+
+			<div class="stats">
+				<div class="stat"><b>{{ loopStats.total }}</b><span>总请求</span></div>
+				<div class="stat ok"><b>{{ loopStats.inserted }}</b><span>已入库</span></div>
+				<div class="stat warn"><b>{{ loopStats.skipped }}</b><span>跳过已有</span></div>
+				<div class="stat bad"><b>{{ loopStats.failed }}</b><span>失败</span></div>
+			</div>
+
+			<div class="log">
+				<el-scrollbar max-height="220px">
+					<div v-for="(line, i) in loopLog" :key="i" class="log-line">{{ line }}</div>
+				</el-scrollbar>
+			</div>
+		</section>
 
 		<!-- 线路列表 -->
-		<el-table v-loading="loading" :data="list" style="margin-top: 16px" @row-click="showDetail">
-			<el-table-column prop="id" label="线路ID" min-width="200" show-overflow-tooltip />
-			<el-table-column prop="name" label="线路名" min-width="160" show-overflow-tooltip />
-			<el-table-column prop="type" label="类型" min-width="80" />
-			<el-table-column prop="citycode" label="城市code" width="80" />
-			<el-table-column prop="start_stop" label="首发站" min-width="110" show-overflow-tooltip />
-			<el-table-column prop="end_stop" label="末站" min-width="110" show-overflow-tooltip />
-			<el-table-column prop="start_time" label="首班" width="90" />
-			<el-table-column prop="end_time" label="末班" width="90" />
-			<el-table-column label="状态" width="80">
-				<template #default="{ row }">
-					{{ statusText(row.status) }}
+		<section class="panel table-panel">
+			<el-table v-loading="loading" :data="list" :row-class-name="rowClass" @row-click="showDetail">
+				<template #empty>
+					<div class="empty">没有找到线路。填写关键词后点击「拉取并入库」，或调整查询条件。</div>
 				</template>
-			</el-table-column>
-			<el-table-column label="环线" width="70">
-				<template #default="{ row }">
-					{{ row.loop === 1 ? '是' : '否' }}
-				</template>
-			</el-table-column>
-			<el-table-column prop="company" label="公司" min-width="120" show-overflow-tooltip />
-			<el-table-column prop="basic_price" label="起步价" width="80" />
-			<el-table-column prop="total_price" label="全程价" width="80" />
-			<el-table-column prop="distance" label="里程(km)" width="90" />
-			<el-table-column prop="uicolor" label="UI色" width="80" />
-			<el-table-column label="详细时间" min-width="180">
-				<template #default="{ row }">
-					<el-tooltip placement="top" :show-after="300">
-						<template #content>
-							<div style="white-space: pre-line; max-width: 420px">{{ formatTimeDesc(row.timedesc) }}
-							</div>
-						</template>
-						<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">
-							{{ timeDescPreview(row.timedesc) }}
-						</div>
-					</el-tooltip>
-				</template>
-			</el-table-column>
-			<el-table-column prop="direc" label="反向ID" min-width="180" show-overflow-tooltip />
-			<el-table-column prop="bounds" label="矩形区域" min-width="180" show-overflow-tooltip />
-			<el-table-column prop="polyline" label="坐标串" min-width="180" show-overflow-tooltip />
-			<el-table-column prop="created_at" label="创建时间" width="170" />
-			<el-table-column label="操作" width="150" fixed="right">
-				<template #default="{ row }">
-					<!-- <el-button size="small" @click.stop="openEdit(row)">编辑</el-button> -->
-					<el-button size="small" type="danger" @click.stop="removeLine(row)">删除</el-button>
-				</template>
-			</el-table-column>
-		</el-table>
+				<el-table-column prop="name" label="线路名" min-width="140" fixed show-overflow-tooltip>
+					<template #default="{ row }">
+						<span class="line-name">{{ row.name }}</span>
+					</template>
+				</el-table-column>
+				<el-table-column prop="id" label="线路ID" min-width="200" show-overflow-tooltip />
+				<el-table-column prop="type" label="类型" min-width="80" />
+				<el-table-column prop="citycode" label="城市code" width="90" />
+				<el-table-column prop="start_stop" label="首发站" min-width="110" show-overflow-tooltip />
+				<el-table-column prop="end_stop" label="末站" min-width="110" show-overflow-tooltip />
+				<el-table-column prop="start_time" label="首班" width="80" />
+				<el-table-column prop="end_time" label="末班" width="80" />
+				<el-table-column label="状态" width="90">
+					<template #default="{ row }">
+						<span class="status" :class="`status-${row.status}`">{{ statusText(row.status) }}</span>
+					</template>
+				</el-table-column>
+				<el-table-column label="环线" width="70">
+					<template #default="{ row }">
+						{{ row.loop === 1 ? '是' : '否' }}
+					</template>
+				</el-table-column>
+				<el-table-column prop="company" label="公司" min-width="120" show-overflow-tooltip />
+				<el-table-column prop="basic_price" label="起步价" width="80" />
+				<el-table-column prop="total_price" label="全程价" width="80" />
+				<el-table-column prop="distance" label="里程(km)" width="90" />
+				<el-table-column label="UI色" width="110">
+					<template #default="{ row }">
+						<span v-if="row.uicolor" class="swatch" :style="{ background: colorOf(row.uicolor) }" />
+						{{ row.uicolor || '-' }}
+					</template>
+				</el-table-column>
+				<el-table-column label="详细时间" min-width="180">
+					<template #default="{ row }">
+						<el-tooltip placement="top" :show-after="300" effect="light" popper-class="bl-popper">
+							<template #content>
+								<div style="white-space: pre-line; max-width: 420px">{{ formatTimeDesc(row.timedesc) }}
+								</div>
+							</template>
+							<div class="ellipsis">{{ timeDescPreview(row.timedesc) }}</div>
+						</el-tooltip>
+					</template>
+				</el-table-column>
+				<el-table-column prop="direc" label="反向ID" min-width="180" show-overflow-tooltip />
+				<el-table-column prop="bounds" label="矩形区域" min-width="180" show-overflow-tooltip />
+				<el-table-column prop="polyline" label="坐标串" min-width="180" show-overflow-tooltip />
+				<el-table-column prop="created_at" label="创建时间" width="170" />
+				<el-table-column label="操作" width="90" fixed="right">
+					<template #default="{ row }">
+						<!-- <el-button size="small" @click.stop="openEdit(row)">编辑</el-button> -->
+						<el-button size="small" type="danger" text @click.stop="removeLine(row)">删除</el-button>
+					</template>
+				</el-table-column>
+			</el-table>
+		</section>
 
 		<!-- 分页懒加载 -->
-		<div style="display: flex; justify-content: flex-end; margin-top: 12px">
+		<div class="pager">
 			<ClientOnly>
 				<el-pagination background layout="total, sizes, prev, pager, next, jumper" :total="total"
 					:page-size="pageSize" :current-page="page" :page-sizes="[10, 20, 50, 100]"
@@ -112,17 +146,27 @@
 		</div>
 
 		<!-- 线路详情（站点列表） -->
-		<div v-if="detail" style="margin-top: 16px">
-			<h3>{{ detail.name }}（{{ detail.id }}）- 共 {{ detail.busstops?.length ?? 0 }} 站</h3>
-			<el-table :data="detail.busstops" style="margin-top: 8px">
-				<el-table-column type="index" label="序号" width="70" />
-				<el-table-column prop="name" label="站名" min-width="160" />
-				<el-table-column prop="location" label="经纬度" min-width="180" />
-			</el-table>
-		</div>
+		<section v-if="detail" ref="detailRef" class="panel detail">
+			<div class="detail-head">
+				<div>
+					<h3 class="detail-title">{{ detail.name }}</h3>
+					<div class="detail-id">{{ detail.id }}，共 {{ detail.busstops?.length ?? 0 }} 站</div>
+				</div>
+				<el-button text @click="detail = null">收起</el-button>
+			</div>
+			<ol class="stops">
+				<li v-for="(s, i) in detail.busstops" :key="i">
+					<span class="stop-no" :style="{ background: colorOf(detail.uicolor) }">{{ Number(i) + 1 }}</span>
+					<div>
+						<div class="stop-name">{{ s.name }}</div>
+						<div class="stop-loc">{{ s.location }}</div>
+					</div>
+				</li>
+			</ol>
+		</section>
 
 		<!-- 编辑弹窗 -->
-		<el-dialog v-model="editDialog" title="编辑线路" width="600px">
+		<el-dialog v-model="editDialog" class="bl-dialog" title="编辑线路" width="600px">
 			<el-form :model="editForm" label-width="90px">
 				<el-form-item label="线路名"><el-input v-model="editForm.name" /></el-form-item>
 				<el-form-item label="类型"><el-input v-model="editForm.type" /></el-form-item>
@@ -150,6 +194,7 @@
 <script setup lang="ts">
 const list = ref<any[]>([])
 const detail = ref<any>(null)
+const detailRef = ref<HTMLElement | null>(null)
 const city = ref('0631')
 const keyword = ref('1')
 const searchText = ref('')
@@ -218,6 +263,8 @@ async function fetchAndSave(keywords: string, page: number = 1) {
 async function showDetail(data: any) {
 	const res = await request(`/api/buslines/${data.id}`)
 	detail.value = res.data
+	await nextTick()
+	detailRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function onSearch() {
@@ -259,6 +306,18 @@ async function removeLine(data: any) {
 	}
 	if (detail.value?.id === data.id) detail.value = null
 	loadList()
+}
+
+// 当前打开详情的行高亮
+function rowClass({ row }: { row: any }) {
+	return detail.value && row.id === detail.value.id ? 'is-active' : ''
+}
+
+// UI色：兼容 "ff0000" 和 "#ff0000"；空值返回空串（让 CSS 用默认色）
+function colorOf(c: any): string {
+	const s = String(c ?? '').trim()
+	if (!s) return ''
+	return /^[0-9a-fA-F]{6}$/.test(s) ? `#${s}` : s
 }
 
 function statusText(status: any): string {
@@ -326,6 +385,11 @@ const loopCurrent = ref(0)      // 当前 keyword
 const loopStats = ref({ total: 0, inserted: 0, skipped: 0, failed: 0, sumFailed: 0})
 const loopLog = ref<string[]>([]) // 实时日志
 const loopTotalRange = ref(999)   // 总范围（用于进度条百分比）
+const loopBegin = ref(0)          // 本次任务起始 keyword（用于进度条百分比）
+const loopPercent = computed(() => {
+	if (!loopCurrent.value || loopTotalRange.value <= 0) return 0
+	return Math.min(100, Math.max(0, Math.round(((loopCurrent.value - loopBegin.value + 1) / loopTotalRange.value) * 100)))
+})
 
 const stopClick = ref(false)
 
@@ -345,6 +409,7 @@ async function startLoopTask() {
 	loopLog.value = []
 	loopCurrent.value = 0
 	loopTotalRange.value = rangeCount
+	loopBegin.value = start
 
 	const runOne = async (k: number, page: number = 1) => {
 		loopCurrent.value = k
@@ -485,3 +550,4 @@ onBeforeRouteLeave(() => {
 	stopLoopOnLeave()
 })
 </script>
+

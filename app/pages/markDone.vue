@@ -1,42 +1,72 @@
 <template>
-	<div style="padding: 20px">
-		<h2>标记页</h2>
-
-		<!-- 查询条件 -->
-		<div style="margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px">
-			<!-- <el-input v-model="filters.name" style="width: 180px" placeholder="按名称搜索" clearable
-				@keyup.enter="onSearch" @clear="onSearch" /> -->
-			<el-input v-model="filters.citycode" style="width: 150px" placeholder="按 citycode 搜索" clearable
-				@keyup.enter="onSearch" @clear="onSearch" />
-			<el-input v-model="filters.status" style="width: 150px" placeholder="按 status 搜索" clearable
-				@keyup.enter="onSearch" @clear="onSearch" />
-			<el-button type="primary" @click="onSearch">查询</el-button>
-			<el-button @click="resetSearch">重置</el-button>
-			<el-button @click="loadList">刷新列表</el-button>
+	<div class="markdone">
+		<!-- 页面标题（不要用 <header>，全局 index.css 里 header 是吸顶栏样式） -->
+		<div class="page-head">
+			<div class="page-title-wrap">
+				<h2 class="page-title"><span class="logo-dot" />城市拉取标记</h2>
+				<span class="logo-en">Mark done</span>
+			</div>
+			<p class="page-meta">共 {{ total }} 条记录</p>
 		</div>
 
+		<!-- 操作区：查询 -->
+		<section class="panel tools">
+			<div class="tool-row">
+				<div class="tool-name">查询<span>按 citycode 或状态筛选</span></div>
+				<div class="tool-fields">
+					<el-input v-model="filters.citycode" class="w-sm" placeholder="按 citycode 搜索" clearable
+						@keyup.enter="onSearch" @clear="onSearch" />
+					<el-input v-model="filters.status" class="w-sm" placeholder="按 status 搜索" clearable
+						@keyup.enter="onSearch" @clear="onSearch" />
+					<el-button type="primary" @click="onSearch">查询</el-button>
+					<el-button @click="resetSearch">重置</el-button>
+					<el-button @click="loadList">刷新列表</el-button>
+				</div>
+			</div>
+		</section>
+
 		<!-- 列表 -->
-		<el-table v-loading="loading" :data="list" style="margin-top: 16px">
-			<el-table-column label="citycode" width="110">
-				<template #default="{ row }">
-					{{ row.citycode ?? '-' }}
+		<section class="panel table-panel">
+			<el-table v-loading="loading" :data="list">
+				<template #empty>
+					<div class="empty">没有找到记录。调整查询条件后重试。</div>
 				</template>
-			</el-table-column>
-			<el-table-column prop="doneNum" label="已执行数量" show-overflow-tooltip />
-			<el-table-column prop="status" label="状态" width="180" />
-			<el-table-column prop="updatedAt" label="更新时间" width="180" />
+				<el-table-column label="citycode" width="110">
+					<template #default="{ row }">
+						{{ row.citycode ?? '-' }}
+					</template>
+				</el-table-column>
+				<el-table-column prop="doneNum" label="已执行数量" min-width="140" show-overflow-tooltip>
+					<template #default="{ row }">
+						<span class="line-name">{{ row.doneNum }}</span>
+					</template>
+				</el-table-column>
+				<el-table-column label="状态" width="110">
+					<template #default="{ row }">
+						<span class="status" :class="`status-${row.status}`">{{ statusText(row.status) }}</span>
+					</template>
+				</el-table-column>
+				<el-table-column prop="updatedAt" label="更新时间" min-width="170" />
+				<el-table-column label="操作" width="90">
+					<template #default="{ row }">
+						<el-button size="small" type="primary" text @click.stop="openEdit(row)">编辑</el-button>
+					</template>
+				</el-table-column>
+			</el-table>
+		</section>
 
-			
-			<el-table-column label="操作" width="150" fixed="right">
-				<template #default="{ row }">
-					<el-button size="small" @click.stop="openEdit(row)">编辑</el-button>
-				</template>
-			</el-table-column>
-		</el-table>
+		<!-- 分页 -->
+		<div class="pager">
+			<ClientOnly>
+				<el-pagination background layout="total, sizes, prev, pager, next, jumper" :total="total"
+					:page-size="pageSize" :current-page="page" :page-sizes="[10, 20, 50, 100]"
+					@size-change="(s: number) => { pageSize = s; page = 1; loadList() }"
+					@current-change="onPageChange" />
+			</ClientOnly>
+		</div>
 
-		
-		<!-- 编辑弹窗 -->
-		<el-dialog v-model="editDialog" title="编辑线路" width="600px">
+		<!-- 编辑弹窗（复用全局 .bl-dialog 样式：圆角卡片 + 主题变量） -->
+		<el-dialog v-model="editDialog" class="bl-dialog" title="编辑标记" width="600px">
 			<el-form :model="editForm" label-width="90px">
 				<el-form-item label="当前index"><el-input v-model="editForm.doneNum" /></el-form-item>
 				<el-form-item label="状态">
@@ -52,16 +82,6 @@
 				<el-button type="primary" @click="submitEdit">保存</el-button>
 			</template>
 		</el-dialog>
-
-		<!-- 分页 -->
-		<div style="display: flex; justify-content: flex-end; margin-top: 12px">
-			<ClientOnly>
-				<el-pagination background layout="total, sizes, prev, pager, next, jumper" :total="total"
-					:page-size="pageSize" :current-page="page" :page-sizes="[10, 20, 50, 100]"
-					@size-change="(s: number) => { pageSize = s; page = 1; loadList() }"
-					@current-change="onPageChange" />
-			</ClientOnly>
-		</div>
 	</div>
 </template>
 
@@ -111,6 +131,11 @@ async function submitEdit() {
 	editDialog.value = false
 	ElMessage.success('修改成功')
 	loadList()
+}
+
+function statusText(status: any): string {
+	const map: Record<number, string> = { 0: '未完成', 1: '进行中', 2: '已完成' }
+	return map[Number(status)] ?? String(status ?? '-')
 }
 
 function onPageChange(p: number) {

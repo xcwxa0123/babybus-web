@@ -1,0 +1,6 @@
+/* ═══════════ 标记页（markDone.vue）特有样式 ═══════════
+   页面骨架 / 主题变量 / 表格基础等共用部分见 index.css */
+
+/* 状态徽章：0=未完成（用基础灰），1=进行中（赭），2=已完成（绿） */
+.markdone .status-1 { color: var(--bl-ochre); background: color-mix(in srgb, var(--bl-ochre) 13%, #fff); }
+.markdone .status-2 { color: var(--bl-sage); background: color-mix(in srgb, var(--bl-sage) 13%, #fff); }

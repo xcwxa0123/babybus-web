@@ -4,12 +4,12 @@
         <div class="panel" :class="{ collapsed: sidebarCollapsed, detailOpen: isDetailExpanded }">
             <div class="panel-header">
                 <template v-if="!sidebarCollapsed">
-                    <el-input v-model="keywordInput" size="default" placeholder="请输入城市名字" clearable
+                    <el-input v-model="keywordInput" size="default" placeholder="输入城市名，按回车查询" clearable
                         @keyup.enter="reload">
                     </el-input>
                 </template>
-                <el-button class="search-btn" @click="reload" v-if="!sidebarCollapsed"><el-icon><Search /></el-icon></el-button>
-                <el-button class="search-btn" @click="reloadAll" v-if="!sidebarCollapsed" title="全量查询（耗时较长）" style="margin-left: 0;">全</el-button>
+                <el-button class="search-btn" @click="reload" v-if="!sidebarCollapsed" title="查询"><el-icon><Search /></el-icon></el-button>
+                <el-button class="search-btn" @click="reloadAll" v-if="!sidebarCollapsed" title="全量查询（耗时较长）">全</el-button>
                 <el-button class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed"
                     :title="sidebarCollapsed ? '展开' : '收起'">
                     <el-icon v-if="sidebarCollapsed"><ArrowLeft /></el-icon>
@@ -19,18 +19,21 @@
 
             <div v-show="!sidebarCollapsed" class="panel-body">
                 <div class="panel-subhead">
-                    <span>线路列表</span>
+                    <span class="subhead-title">线路列表</span>
                     <span class="count-badge">{{ lines.length }}</span>
                 </div>
 
                 <div v-if="loading" class="state-msg">加载中…</div>
                 <div v-else-if="loadError" class="state-msg error">{{ loadError }}</div>
-                <div v-else-if="lines.length === 0" class="state-msg">未找到相关线路</div>
+                <div v-else-if="lines.length === 0" class="state-msg">
+                    {{ hasSearched ? '没有找到线路，换个城市名再试一次。' : '输入城市名并按回车，线路会显示在这里。' }}
+                </div>
 
                 <div v-else ref="listScrollbarRef" class="panel-scrollbar">
                     <div v-for="line in lines" :key="line.id" :ref="(el) => setLineItemRef(line.id, el)"
                         class="line-item"
-                        :class="{ active: activeId === line.id }" :style="{ '--line-color': line.color }"
+                        :class="{ active: activeId === line.id }"
+                        :style="{ '--line-color': line.color, '--line-gradient': gradientOf(line.color, line.color2) }"
                         @click="focusLine(line.id)" @mouseenter="previewLine(line.id)"
                         @mouseleave="unpreviewLine(line.id)">
                         <span class="color-dot"></span>
@@ -59,9 +62,10 @@
         <!-- 点击命中多条线路时的候选弹窗 -->
         <div v-if="candidatePopup.visible" class="candidate-popup"
             :style="{ left: candidatePopup.x + 'px', top: candidatePopup.y + 'px' }">
-            <div class="candidate-title">经过此处（{{ candidatePopup.lines.length }} 条线路）</div>
+            <div class="candidate-title">经过此处的 {{ candidatePopup.lines.length }} 条线路</div>
             <div v-for="c in candidatePopup.lines" :key="c.id" class="candidate-item"
-                :class="{ active: activeId === c.id }" :style="{ '--line-color': c.color }"
+                :class="{ active: activeId === c.id }"
+                :style="{ '--line-color': c.color, '--line-gradient': gradientOf(c.color, c.color2) }"
                 @mouseenter="hoverCandidate(c.id)" @mouseleave="unpreviewLine(c.id)" @click="confirmCandidate(c.id)">
                 <span class="color-dot"></span>
                 <span class="candidate-name">{{ c.name }}</span>
@@ -69,12 +73,16 @@
         </div>
 
         <!-- 底部信息弹框：当前选中线路 -->
-        <div class="detail-bar" :class="{ collapsed: bottombarCollapsed }">
+        <div class="detail-bar" :class="{ collapsed: bottombarCollapsed }"
+            :style="{ '--line-color': currentDisplay?.color, '--line-gradient': gradientOf(currentDisplay?.color, currentDisplay?.color2) }">
             <div class="detail-header">
                 <div class="detail-title" v-show="!bottombarCollapsed">
-                    <span class="color-dot" :style="{ background: currentDisplay?.color }"></span>
+                    <span class="color-dot"></span>
                     <span class="detail-name">{{ currentDisplay?.name }}</span>
-                    <el-tag v-if="isReverse" size="small" type="warning">反向</el-tag>
+                    <el-tag v-if="isReverse" size="small" type="warning" effect="light" round>反向</el-tag>
+                    <span v-if="currentDisplay?.start_stop || currentDisplay?.end_stop" class="detail-route">
+                        {{ currentDisplay?.start_stop || '-' }} 至 {{ currentDisplay?.end_stop || '-' }}
+                    </span>
                 </div>
                 <div class="detail-header-actions">
                     <el-button v-show="!bottombarCollapsed" size="small" type="primary" plain :disabled="!detailOpposite" @click="toggleReverse">
@@ -90,31 +98,24 @@
             <div class="detail-body" :class="{ collapsed: bottombarCollapsed }">
                 <div class="detail-inner">
                     <div class="detail-grid">
-                        <div class="detail-item"><span class="label">类型</span>{{ currentDisplay?.type || '-' }}</div>
-                        <div class="detail-item"><span class="label">首发站</span>{{ currentDisplay?.start_stop || '-' }}</div>
-                        <div class="detail-item"><span class="label">末站</span>{{ currentDisplay?.end_stop || '-' }}</div>
-                        <div class="detail-item"><span class="label">首班</span>{{ currentDisplay?.start_time || '-' }}</div>
-                        <div class="detail-item"><span class="label">末班</span>{{ currentDisplay?.end_time || '-' }}</div>
-                        <div class="detail-item"><span class="label">全程里程</span>{{ currentDisplay?.distance ?
-                            currentDisplay.distance
-                            + ' km' : '-' }}</div>
-                        <div class="detail-item"><span class="label">起步价</span>{{ String(currentDisplay?.basic_price) ?
-                            currentDisplay?.basic_price + ' 元' : '-' }}</div>
-                        <div class="detail-item"><span class="label">全程票价</span>{{ String(currentDisplay?.total_price) ?
-                            currentDisplay?.total_price + ' 元' : '-' }}</div>
+                        <div class="detail-item"><span class="label">类型</span><span class="value">{{ currentDisplay?.type || '-' }}</span></div>
+                        <div class="detail-item"><span class="label">首班</span><span class="value">{{ currentDisplay?.start_time || '-' }}</span></div>
+                        <div class="detail-item"><span class="label">末班</span><span class="value">{{ currentDisplay?.end_time || '-' }}</span></div>
+                        <div class="detail-item"><span class="label">全程里程</span><span class="value">{{ currentDisplay?.distance ? currentDisplay.distance + ' km' : '-' }}</span></div>
+                        <div class="detail-item"><span class="label">起步价</span><span class="value">{{ priceText(currentDisplay?.basic_price) }}</span></div>
+                        <div class="detail-item"><span class="label">全程票价</span><span class="value">{{ priceText(currentDisplay?.total_price) }}</span></div>
                         <!-- <div class="detail-item"><span class="label">城市</span>{{ currentDisplay.citycode || '-' }}</div> -->
                         <!-- <div class="detail-item"><span class="label">线路ID</span>{{ currentDisplay.id }}</div> -->
-                        <div class="detail-item"><span class="label">站点数</span>{{ currentDisplay?.busstops?.length ?? 0 }} 站
-                        </div>
+                        <div class="detail-item"><span class="label">站点数</span><span class="value">{{ currentDisplay?.busstops?.length ?? 0 }} 站</span></div>
                     </div>
-                    <div v-if="formatTimeDesc(currentDisplay?.timedesc) !== '-'" class="detail-timedesc">
-                        <span class="label">详细时间</span>
-                        <span style="white-space: pre-line">{{ formatTimeDesc(currentDisplay?.timedesc) }}</span>
+                    <div v-if="formatTimeDesc(currentDisplay?.timedesc) !== '-'" class="detail-section">
+                        <div class="label">详细时间</div>
+                        <div class="timedesc">{{ formatTimeDesc(currentDisplay?.timedesc) }}</div>
                     </div>
-                    <div class="detail-stops">
-                        <div class="label" style="margin-bottom: 4px">站点列表</div>
+                    <div class="detail-section">
+                        <div class="label">站点列表</div>
                         <div class="stop-tags">
-                            <span v-for="(stop, si) in currentDisplay?.busstops" :key="stop.id" class="stop-tag">{{ si + 1 }}. {{ stop.name }}</span>
+                            <span v-for="(stop, si) in currentDisplay?.busstops" :key="stop.id" class="stop-tag"><i>{{ si + 1 }}</i>{{ stop.name }}</span>
                         </div>
                     </div>
                 </div>
@@ -149,12 +150,14 @@ interface BusLine {
     total_price?: number;
     timedesc?: string; // URL 编码的 JSON 串
     busstops?: BusStop[];
-    color?: string;
+    color?: string; // 渐变起点色（也用于站点描边等单色场合）
+    color2?: string; // 渐变终点色
 }
 interface LineLayer {
     polyline: any;
     path: number[][]; // 原始坐标数组（用于命中检测，避免依赖 getPath 返回类型）
     stationOverlays: any[];
+    segmentOverlays: any[]; // 选中时叠加的渐变分段线
 }
 
 const props = defineProps<{
@@ -172,6 +175,7 @@ const sidebarCollapsed = ref(false);
 const bottombarCollapsed = ref(true);
 const loading = ref(false);
 const loadError = ref("");
+const hasSearched = ref(false); // 是否已发起过查询（用于列表空状态文案）
 const progress = ref(0); // 分批加载进度（0-100）
 const totalLines = ref(0); // 总线路数
 
@@ -205,7 +209,7 @@ const candidatePopup = ref<{
     visible: boolean;
     x: number;
     y: number;
-    lines: { id: string; name: string; color: string }[];
+    lines: { id: string; name: string; color: string; color2?: string }[];
 }>({ visible: false, x: 0, y: 0, lines: [] });
 
 // 底部信息弹框：当前选中的线路信息
@@ -249,6 +253,11 @@ function formatTimeDesc(raw: any): string {
     }
 }
 
+// 票价：无数据显示 -
+function priceText(v: any): string {
+    return v === undefined || v === null || v === "" ? "-" : `${v} 元`;
+}
+
 function formatInterval(t: string): string {
     const m = String(t).split(":");
     const hours = Number(m[0]) || 0;
@@ -258,35 +267,55 @@ function formatInterval(t: string): string {
     return `${mins}分钟`;
 }
 
-// 线路配色：饱和度/明度较高，避免浅色在浅底图上难以辨识，
-// 且相邻色号色相尽量拉开，便于视觉区分
-const PALETTE = [
-    "#e6194b", // 红
-    "#3cb44b", // 绿
-    "#4363d8", // 蓝
-    "#f58231", // 橙
-    "#911eb4", // 紫
-    "#008080", // 青
-    "#e6007e", // 品红
-    "#9a6324", // 棕
-    "#000075", // 藏青
-    "#808000", // 橄榄
-    "#ff4500", // 橙红
-    "#4b0082", // 靛蓝
-    "#2f4f4f", // 墨绿灰
-    "#c71585", // 紫红
-    "#556b2f", // 深橄榄绿
-    "#8b0000", // 深红
+// 线路配色：每条线一组「起点色 → 终点色」。
+// 选中时沿线路方向渐变；未选中时只用起点色并整体半透明。
+// 色相之间拉开，且明度/饱和度控制在浅色底图上仍然看得清的范围
+const PALETTE: [string, string][] = [
+    ["#4a90c4", "#62cfe0"], // 天蓝 → 水色
+    ["#e0607e", "#f6a77e"], // 玫瑰 → 蜜桃
+    ["#5f7fd8", "#a287ea"], // 靛蓝 → 薰衣草
+    ["#2fae94", "#8fdc8f"], // 青绿 → 薄荷
+    ["#ee8444", "#f6c35a"], // 珊瑚橙 → 琥珀
+    ["#a85cc6", "#f07fbd"], // 紫 → 粉
+    ["#3f9a68", "#bcd45c"], // 森绿 → 青柠
+    ["#d6504f", "#f0916f"], // 绯红 → 鲑鱼粉
+    ["#3a78bd", "#4fc6c6"], // 海蓝 → 青
+    ["#8467cf", "#55a0e6"], // 紫罗兰 → 晴空蓝
+    ["#c27c30", "#e8be62"], // 赭石 → 金
+    ["#cc4b88", "#ee8f84"], // 品红 → 珊瑚粉
 ];
 
+
 // 线路样式常量
+// 底层折线始终存在（负责点击命中）；选中时它变成一圈半透明光晕，渐变分段线叠在上面
 const STYLE = {
-    default: { strokeWeight: 5, strokeOpacity: 0.85, zIndex: 10 },
-    preview: { strokeWeight: 5, strokeOpacity: 1, zIndex: 50 },
-    active: { strokeWeight: 9, strokeOpacity: 1, zIndex: 100 },
+    default: { strokeWeight: 6, strokeOpacity: 0.72, zIndex: 10, isOutline: true },
+    preview: { strokeWeight: 7, strokeOpacity: 0.95, zIndex: 50, isOutline: true },
+    active: { strokeWeight: 15, strokeOpacity: 0.22, zIndex: 100, isOutline: false },
     // 有其他线路被选中/预览时，其它线路淡化的样式
-    dimmed: { strokeWeight: 3, strokeOpacity: 0.15, zIndex: 10 },
+    dimmed: { strokeWeight: 3, strokeOpacity: 0.12, zIndex: 10, isOutline: false },
 };
+
+// 选中线路的渐变：分成多少段（越多越平滑，越耗性能；只对选中的一条线生效）
+const GRADIENT_STEPS = 28;
+
+// "#rrggbb" 两色线性插值
+function lerpHex(a: string, b: string, t: number): string {
+    const pa = parseInt(a.slice(1), 16);
+    const pb = parseInt(b.slice(1), 16);
+    const ch = (shift: number) => {
+        const x = (pa >> shift) & 255;
+        const y = (pb >> shift) & 255;
+        return Math.round(x + (y - x) * t);
+    };
+    return "#" + [16, 8, 0].map((sh) => ch(sh).toString(16).padStart(2, "0")).join("");
+}
+
+// 列表色点 / 站点序号等 UI 用的 CSS 渐变
+function gradientOf(c1?: string, c2?: string): string {
+    if (!c1) return "";
+    return `linear-gradient(135deg, ${c1}, ${c2 || c1})`;
+}
 
 let map: any = null;
 let AMap: any = null;
@@ -317,8 +346,18 @@ function parseLocation(loc: string): [number, number] | null {
     return [lng!, lat!];
 }
 
-// 移除某条线路的站点覆盖物
+// 移除某条线路的渐变分段线
+function removeGradient(busId: string) {
+    const layer = lineLayers[busId];
+    if (layer?.segmentOverlays.length) {
+        layer.segmentOverlays.forEach((o) => map.remove(o));
+        layer.segmentOverlays = [];
+    }
+}
+
+// 移除某条线路的站点覆盖物（同时清掉它的渐变分段线，两者总是一起出现/消失）
 function removeStations(busId: string) {
+    removeGradient(busId);
     const layer = lineLayers[busId];
     if (layer?.stationOverlays.length) {
         layer.stationOverlays.forEach((o) => map.remove(o));
@@ -345,7 +384,7 @@ function addStations(busId: string, color: string) {
             strokeColor: color,
             strokeWeight: 2,
             strokeOpacity: 1,
-            fillColor: "#fff",
+            fillColor: "#fffef9",
             fillOpacity: 0.9,
             zIndex: 200, // 站点图层需在线路（含高亮 zIndex:100）之上
         });
@@ -355,11 +394,11 @@ function addStations(busId: string, color: string) {
             offset: new AMap.Pixel(8, 8),
             style: {
                 fontSize: "11px",
-                color: "#333",
-                background: "rgba(255,255,255,.9)",
+                color: "#2c2416",
+                background: "rgba(255,254,249,.92)",
                 border: "none",
-                borderRadius: "2px",
-                padding: "1px 4px",
+                borderRadius: "4px",
+                padding: "1px 5px",
             },
             zIndex: 200,
         });
@@ -367,6 +406,57 @@ function addStations(busId: string, color: string) {
     });
 
     layer.stationOverlays = overlays;
+    overlays.forEach((o) => map.add(o));
+}
+
+// 为选中的线路沿路径叠加渐变：按累计距离切成 N 段，每段取起止色之间的插值
+function addGradient(busId: string) {
+    const line = allLines.value.find((l) => l.id === busId);
+    const layer = lineLayers[busId];
+    if (!line || !layer || !line.color) return;
+    removeGradient(busId);
+
+    const path = layer.path;
+    if (path.length < 2) return;
+    const c1 = line.color;
+    const c2 = line.color2 || line.color;
+
+    const cum: number[] = [0];
+    for (let i = 1; i < path.length; i++) {
+        const p = path[i - 1]!;
+        const q = path[i]!;
+        cum.push(cum[i - 1]! + geoDistance(p[0]!, p[1]!, q[0]!, q[1]!));
+    }
+    const total = cum[cum.length - 1]! || 1;
+    const steps = Math.min(GRADIENT_STEPS, path.length - 1);
+
+    const overlays: any[] = [];
+    let start = 0;
+    for (let k = 0; k < steps; k++) {
+        let end = start + 1;
+        if (k === steps - 1) {
+            end = path.length - 1;
+        } else {
+            const target = ((k + 1) / steps) * total;
+            while (end < path.length - 1 && cum[end]! < target) end++;
+        }
+        if (end <= start) continue;
+        overlays.push(
+            new AMap.Polyline({
+                path: path.slice(start, end + 1),
+                strokeColor: lerpHex(c1, c2, (k + 0.5) / steps),
+                strokeWeight: 7,
+                strokeOpacity: 1,
+                lineJoin: "round",
+                lineCap: "round",
+                clickable: false, // 点击仍由底层折线处理
+                zIndex: 101,
+            })
+        );
+        start = end;
+    }
+
+    layer.segmentOverlays = overlays;
     overlays.forEach((o) => map.add(o));
 }
 
@@ -437,6 +527,7 @@ function highlightLine(busId: string) {
 
     const line = allLines.value.find((l) => l.id === busId);
     if (line?.color) addStations(busId, line.color);
+    addGradient(busId);
 
     const layer = lineLayers[busId];
     if (layer?.polyline) {
@@ -491,7 +582,7 @@ function geoDistance(lng1: number, lat1: number, lng2: number, lat2: number): nu
 }
 
 // 点击坐标反查：返回经过"点击点附近站点"的所有线路（含当前点击线路）
-function findLinesNearBy(lnglat: any): { id: string; name: string; color: string }[] {
+function findLinesNearBy(lnglat: any): { id: string; name: string; color: string; color2?: string }[] {
     const clng = lnglat.getLng();
     const clat = lnglat.getLat();
     const NEAR_DIST = 200; // 附近站点距离阈值（米）
@@ -509,13 +600,13 @@ function findLinesNearBy(lnglat: any): { id: string; name: string; color: string
     }
 
     // 2. 找出经过这些站点的所有线路
-    const lineMap = new Map<string, { id: string; name: string; color: string }>();
+    const lineMap = new Map<string, { id: string; name: string; color: string; color2?: string }>();
     for (const line of lines.value) {
         for (const stop of line.busstops || []) {
             const stopKey = String(stop.id ?? "");
             if (stopKey && nearStopIds.has(stopKey)) {
                 if (!lineMap.has(line.id)) {
-                    lineMap.set(line.id, { id: line.id, name: line.name, color: line.color ?? "#999" });
+                    lineMap.set(line.id, { id: line.id, name: line.name, color: line.color ?? "#999", color2: line.color2 });
                 }
             }
         }
@@ -588,6 +679,8 @@ function renderLine(line: BusLine, color: string) {
         lineJoin: "round",
         lineCap: "round",
         strokeStyle: "solid",
+        outlineColor: "#ffffff", // 白色细描边：重叠线路之间有清晰的分界，也更有玻璃质感
+        borderWeight: 1,
         cursor: "pointer", // 悬浮在手型光标，提示可点击
         ...STYLE.default,
     });
@@ -597,7 +690,7 @@ function renderLine(line: BusLine, color: string) {
         if (lnglat) handleLineClick(line.id, lnglat, e);
     });
     map.add(polyline);
-    lineLayers[line.id] = { polyline, path, stationOverlays: [] };
+    lineLayers[line.id] = { polyline, path, stationOverlays: [], segmentOverlays: [] };
 }
 
 // 清空当前地图上的所有线路与站点，重置状态
@@ -605,6 +698,7 @@ function clearMapLayers() {
     Object.values(lineLayers).forEach((layer) => {
         if (layer.polyline) map.remove(layer.polyline);
         layer.stationOverlays.forEach((o) => map.remove(o));
+        layer.segmentOverlays.forEach((o) => map.remove(o));
     });
     lineLayers = {};
     lines.value = [];
@@ -664,6 +758,7 @@ function stopLoad() {
 
 async function loadData(keyword: string, full = false) {
     const token = ++loadToken; // 取号，旧任务自动失效
+    hasSearched.value = true;
     loading.value = true;
     loadError.value = "";
     progress.value = 0;
@@ -706,7 +801,10 @@ async function loadData(keyword: string, full = false) {
 
             const raw = res.data || [];
             // 为当前批分配颜色（颜色索引基于已累积数量，保证全局一致）
-            const colored = raw.map((line: any, i: any) => ({ ...line, color: PALETTE[(all.length + i) % PALETTE.length] }));
+            const colored = raw.map((line: any, i: any) => {
+                const [c1, c2] = PALETTE[(all.length + i) % PALETTE.length]!;
+                return { ...line, color: c1, color2: c2 };
+            });
 
             // 完整数据（含反向，供切换反向使用）
             all = all.concat(colored);
@@ -748,7 +846,7 @@ async function reloadAll() {
         await ElMessageBox.confirm(
             "全量查询会拉取库内所有城市的线路，所需时间很长，确定继续吗？",
             "提示",
-            { type: "warning", confirmButtonText: "继续", cancelButtonText: "取消" }
+            { type: "warning", confirmButtonText: "继续", cancelButtonText: "取消", customClass: "map-dialog" }
         );
     } catch {
         return; // 取消
@@ -792,19 +890,83 @@ onBeforeRouteLeave(() => {
 });
 </script>
 
+<!-- Element Plus 主题变量：对齐 index.css 色板。确认弹窗会挂到 body，所以不加 scoped -->
+<style>
+.map-wrapper,
+.map-dialog {
+    --map-sage: #55805b;
+    --map-ochre: #a9701f;
+
+    --el-color-primary: var(--sky-accent);
+    --el-color-primary-light-3: color-mix(in srgb, var(--sky-accent) 70%, #fff);
+    --el-color-primary-light-5: color-mix(in srgb, var(--sky-accent) 50%, #fff);
+    --el-color-primary-light-7: color-mix(in srgb, var(--sky-accent) 30%, #fff);
+    --el-color-primary-light-8: color-mix(in srgb, var(--sky-accent) 20%, #fff);
+    --el-color-primary-light-9: color-mix(in srgb, var(--sky-accent) 12%, #fff);
+    --el-color-primary-dark-2: color-mix(in srgb, var(--sky-accent) 80%, #000);
+
+    --el-color-warning: var(--map-ochre);
+    --el-color-warning-light-3: color-mix(in srgb, var(--map-ochre) 70%, #fff);
+    --el-color-warning-light-5: color-mix(in srgb, var(--map-ochre) 50%, #fff);
+    --el-color-warning-light-7: color-mix(in srgb, var(--map-ochre) 30%, #fff);
+    --el-color-warning-light-8: color-mix(in srgb, var(--map-ochre) 20%, #fff);
+    --el-color-warning-light-9: color-mix(in srgb, var(--map-ochre) 12%, #fff);
+    --el-color-warning-dark-2: color-mix(in srgb, var(--map-ochre) 80%, #000);
+
+    --el-color-danger: var(--rose-accent);
+
+    --el-text-color-primary: var(--ink);
+    --el-text-color-regular: var(--ink-mid);
+    --el-text-color-secondary: var(--ink-light);
+    --el-text-color-placeholder: var(--ink-light);
+    --el-border-color: var(--ink-faint);
+    --el-border-color-light: rgba(180, 160, 120, 0.25);
+    --el-border-color-lighter: rgba(180, 160, 120, 0.16);
+    --el-fill-color: var(--cream-dark);
+    --el-fill-color-light: var(--cream);
+    --el-fill-color-blank: var(--paper);
+    --el-bg-color: var(--paper);
+    --el-border-radius-base: 10px;
+    --el-font-family: 'Noto Sans SC', sans-serif;
+}
+
+.map-dialog {
+    border-radius: 16px;
+    box-shadow: var(--shadow-md);
+}
+
+.map-dialog .el-message-box__title {
+    font-family: 'Noto Serif SC', serif;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+</style>
+
 <style scoped>
 .map-wrapper {
     position: relative;
     width: 100%;
     height: 84vh;
+    overflow: hidden;
 }
 
 .map {
     width: 100%;
-    height: 800px;
+    height: 100%;
 }
 
-/* 加载进度条 */
+/* ── 浮层通用：与顶栏同一套半透明纸面 ── */
+.panel,
+.detail-bar,
+.candidate-popup,
+.map-loading-bar {
+    background: rgba(255, 254, 249, 0.92);
+    backdrop-filter: blur(20px) saturate(1.2);
+    border: 1px solid rgba(180, 160, 120, 0.16);
+    box-shadow: var(--shadow-md);
+}
+
+/* ── 加载进度条 ── */
 .map-loading-bar {
     position: absolute;
     top: 16px;
@@ -813,90 +975,100 @@ onBeforeRouteLeave(() => {
     z-index: 300;
     width: 320px;
     max-width: calc(100% - 48px);
-    background: rgba(255, 255, 255, 0.92);
-    border-radius: 8px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-    padding: 10px 14px;
-    backdrop-filter: blur(4px);
+    border-radius: 14px;
+    padding: 12px 16px;
     pointer-events: none;
 }
+
 /* 进度条右上角关闭按钮：关闭进度条并终止轮询 */
 .loading-close {
     position: absolute;
     top: -8px;
     right: -8px;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     padding: 0;
-    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--ink-faint);
     border-radius: 50%;
-    background: #fff;
-    color: #606266;
+    background: var(--paper);
+    color: var(--ink-mid);
     font-size: 14px;
     line-height: 1;
     cursor: pointer;
     pointer-events: auto; /* 父级 pointer-events: none，需单独开启 */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition: all 0.22s ease;
 }
+
 .loading-close:hover {
-    background: #f0f2f5;
+    background: var(--sky);
+    border-color: var(--sky-mid);
+    color: var(--sky-accent);
 }
+
+.loading-close:focus-visible {
+    outline: 2px solid var(--sky-accent);
+    outline-offset: 2px;
+}
+
 .loading-info {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: baseline;
     margin-bottom: 8px;
     font-size: 13px;
-    color: #606266;
+    color: var(--ink-mid);
 }
+
 .loading-percent {
-    font-weight: 600;
-    color: #409eff;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
 }
+
 .loading-track {
     height: 4px;
-    background: #ebeef5;
+    background: var(--cream-dark);
     border-radius: 2px;
     overflow: hidden;
 }
+
 .loading-fill {
     height: 100%;
-    background: linear-gradient(90deg, #409eff, #66b1ff);
+    background: linear-gradient(90deg, var(--sky-accent), color-mix(in srgb, var(--sky-accent) 50%, #bfe6f5));
     border-radius: 2px;
     transition: width 0.2s ease;
 }
 
+/* ── 左侧面板 ── */
 .panel {
     position: absolute;
     top: 12px;
     left: 12px;
     z-index: 100;
-    width: 280px;
+    width: 290px;
     max-width: calc(100% - 24px);
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.15);
+    border-radius: 16px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     max-height: 90%; /* 收起底部详情时占 90% */
     transition: width 0.2s ease, max-height 0.25s ease;
 }
+
 /* 底部详情弹框展开时，左侧列表压缩到 30% */
 .panel.detailOpen {
     max-height: 30%;
 }
+
 /* 左侧折叠为窄条时，恢复自身高度不受联动影响 */
 .panel.collapsed {
-    max-height: 44px;
-}
-
-.panel.collapsed {
     width: 44px;
+    max-height: 44px;
 }
 
 .panel-header {
@@ -904,34 +1076,49 @@ onBeforeRouteLeave(() => {
     align-items: center;
     gap: 6px;
     padding: 10px;
-    border-bottom: 1px solid #ebeef5;
-    background: #f5f7fa;
+    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
+    background: rgba(243, 237, 226, 0.6);
+}
+
+.panel.collapsed .panel-header {
+    padding: 7px;
+    border-bottom: none;
+    background: transparent;
 }
 
 .panel-header :deep(.el-input) {
     flex: 1;
 }
 
-.search-btn {
-    cursor: pointer;
+.panel-header :deep(.el-button + .el-button) {
+    margin-left: 0;
+}
+
+/* .search-btn 的圆形基础样式来自 index.css，这里只对齐输入框高度 */
+.panel-header .search-btn {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     font-size: 13px;
 }
 
 .collapse-btn {
     flex-shrink: 0;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
     border: none;
+    border-radius: 50%;
     background: transparent;
-    cursor: pointer;
-    font-size: 16px;
-    line-height: 1;
-    color: #606266;
-    border-radius: 4px;
+    color: var(--ink-mid);
+    font-size: 15px;
+    transition: all 0.22s ease;
 }
 
 .collapse-btn:hover {
-    background: #e4e7ed;
+    background: var(--sky);
+    color: var(--sky-accent);
 }
 
 .panel-body {
@@ -939,7 +1126,10 @@ onBeforeRouteLeave(() => {
     min-height: 0;
     overflow: auto;
     padding: 8px 0;
+    display: flex;
+    flex-direction: column;
 }
+
 .panel-scrollbar {
     flex: 1;
     min-height: 0;
@@ -951,49 +1141,59 @@ onBeforeRouteLeave(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 12px 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #303133;
+    padding: 4px 14px 8px;
+}
+
+.subhead-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
 }
 
 .count-badge {
     font-size: 12px;
-    font-weight: 400;
-    color: #909399;
-    background: #f0f2f5;
-    border-radius: 10px;
-    padding: 1px 8px;
+    color: var(--ink-mid);
+    background: var(--cream-dark);
+    border-radius: 999px;
+    padding: 1px 10px;
+    font-variant-numeric: tabular-nums;
 }
 
 .state-msg {
-    padding: 24px 12px;
+    padding: 28px 18px;
     text-align: center;
     font-size: 13px;
-    color: #909399;
+    line-height: 1.7;
+    color: var(--ink-light);
 }
 
 .state-msg.error {
-    color: #f56c6c;
+    color: var(--rose-accent);
 }
 
+/* 线路颜色本身是信息：色点 + 选中态左边线都取线路色 */
 .line-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 12px;
+    gap: 10px;
+    padding: 8px 14px 8px 11px;
     cursor: pointer;
     font-size: 13px;
+    color: var(--ink);
     border-left: 3px solid transparent;
+    transition: background 0.18s ease;
 }
 
 .line-item:hover {
-    background: #f5f7fa;
+    background: var(--cream-dark);
 }
 
 .line-item.active {
-    background: #ecf5ff;
+    background: var(--sky);
     border-left-color: var(--line-color);
+    font-weight: 500;
 }
 
 .color-dot {
@@ -1001,8 +1201,8 @@ onBeforeRouteLeave(() => {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: var(--line-color);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+    background: var(--line-gradient, var(--line-color));
+    box-shadow: 0 0 0 1px rgba(255, 254, 249, 0.9), 0 1px 4px color-mix(in srgb, var(--line-color, #999) 45%, transparent);
 }
 
 .line-name {
@@ -1014,43 +1214,42 @@ onBeforeRouteLeave(() => {
 
 .stop-count {
     flex-shrink: 0;
-    font-size: 11px;
-    color: #909399;
+    font-size: 12px;
+    color: var(--ink-light);
+    font-variant-numeric: tabular-nums;
 }
 
-/* 候选弹窗 */
+/* ── 候选弹窗 ── */
 .candidate-popup {
     position: absolute;
     z-index: 200;
-    width: 200px;
+    width: 220px;
     max-height: 260px;
     overflow: auto;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+    border-radius: 14px;
     padding: 6px 0;
 }
 
 .candidate-title {
-    padding: 6px 12px 8px;
+    padding: 8px 14px;
     font-size: 12px;
-    font-weight: 600;
-    color: #606266;
-    border-bottom: 1px solid #f0f2f5;
+    color: var(--ink-light);
+    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
 }
 
 .candidate-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 12px;
+    gap: 10px;
+    padding: 8px 14px;
     cursor: pointer;
     font-size: 13px;
+    color: var(--ink);
 }
 
 .candidate-item:hover,
 .candidate-item.active {
-    background: #ecf5ff;
+    background: var(--sky);
 }
 
 .candidate-name {
@@ -1059,16 +1258,14 @@ onBeforeRouteLeave(() => {
     white-space: nowrap;
 }
 
-/* 底部信息弹框 */
+/* ── 底部信息弹框 ── */
 .detail-bar {
     position: absolute;
     left: 12px;
     right: 12px;
     bottom: 12px;
     z-index: 200;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+    border-radius: 16px;
     max-height: 45%;
     display: flex;
     flex-direction: column;
@@ -1079,37 +1276,55 @@ onBeforeRouteLeave(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 16px;
-    border-bottom: 1px solid #ebeef5;
-    background: #f5f7fa;
+    gap: 12px;
+    padding: 10px 14px 10px 18px;
+    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
+    background: rgba(243, 237, 226, 0.6);
     transition: padding 0.25s ease;
 }
+
 /* 收起时：只保留 collapse-btn，header 压缩成窄条 */
 .detail-bar.collapsed .detail-header {
-    padding: 4px 12px;
+    padding: 4px 10px;
     justify-content: flex-end;
     border-bottom: none;
+    background: transparent;
 }
+
 .detail-header-actions {
     display: flex;
     align-items: center;
+    flex-shrink: 0;
     gap: 8px;
 }
-.detail-header-actions .collapse-btn {
-    flex-shrink: 0;
+
+.detail-header-actions :deep(.el-button + .el-button) {
+    margin-left: 0;
 }
 
 .detail-title {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: baseline;
+    gap: 10px;
     min-width: 0;
 }
 
+.detail-title .color-dot {
+    align-self: center;
+}
+
 .detail-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #303133;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+    white-space: nowrap;
+}
+
+.detail-route {
+    font-size: 13px;
+    color: var(--ink-light);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1118,55 +1333,77 @@ onBeforeRouteLeave(() => {
 .detail-body {
     display: grid;
     grid-template-rows: 1fr; /* 展开态占满 */
+    min-height: 0;
+    overflow: auto;
     transition: grid-template-rows 0.25s ease;
 }
+
 .detail-body.collapsed {
     grid-template-rows: 0fr; /* 折叠为 0 */
 }
-.detail-body.collapsed .detail-inner{
+
+.detail-body.collapsed .detail-inner {
     padding: 0;
 }
+
 /* 内容包裹层：控制 overflow，才能让 0fr 真正裁剪 */
 .detail-inner {
     overflow: hidden;
     min-height: 0;
-    padding: 12px 16px;
+    padding: 14px 18px 16px;
 }
 
 .detail-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 6px 16px;
-    margin-bottom: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px 20px;
+    margin-bottom: 14px;
 }
 
 .detail-item {
-    font-size: 13px;
-    color: #303133;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.label {
+    font-size: 12px;
+    color: var(--ink-light);
+}
+
+.detail-item .value {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ink);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
-.detail-item .label,
-.detail-timedesc .label {
-    color: #909399;
-    margin-right: 6px;
+.detail-section {
+    padding-top: 12px;
+    margin-top: 2px;
+    border-top: 1px solid rgba(180, 160, 120, 0.14);
 }
 
-.detail-timedesc {
-    font-size: 13px;
-    color: #303133;
-    padding: 6px 0;
-    border-top: 1px solid #f0f2f5;
+.detail-section + .detail-section {
+    margin-top: 12px;
+}
+
+.detail-section .label {
     margin-bottom: 6px;
 }
 
-.detail-stops {
-    border-top: 1px solid #f0f2f5;
-    padding-top: 8px;
+.timedesc {
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--ink-mid);
+    white-space: pre-line;
 }
 
+/* 站点有先后顺序，所以带序号；序号底色取线路色 */
 .stop-tags {
     display: flex;
     flex-wrap: wrap;
@@ -1174,10 +1411,59 @@ onBeforeRouteLeave(() => {
 }
 
 .stop-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
-    color: #606266;
-    background: #f4f4f5;
-    border-radius: 3px;
-    padding: 2px 6px;
+    color: var(--ink-mid);
+    background: var(--cream);
+    border: 1px solid rgba(180, 160, 120, 0.18);
+    border-radius: 999px;
+    padding: 2px 10px 2px 3px;
+}
+
+.stop-tag i {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--line-gradient, var(--sky-accent));
+    color: #fff;
+    font-size: 11px;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── 响应式（断点与 index.css 一致） ── */
+@media (max-width: 760px) {
+    .panel {
+        width: calc(100% - 24px);
+    }
+
+    .panel.collapsed {
+        width: 44px;
+    }
+
+    .detail-bar {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        max-height: 55%;
+    }
+
+    .detail-route {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel,
+    .detail-header,
+    .detail-body,
+    .loading-fill {
+        transition: none;
+    }
 }
 </style>
