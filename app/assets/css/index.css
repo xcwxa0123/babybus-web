@@ -48,6 +48,23 @@ body::before {
     pointer-events: none;
 }
 
+/* 纸面颗粒（grain）：极淡噪点铺满全屏、压在内容之上，像纸张/印刷的纤维颗粒。
+   用 SVG feTurbulence 生成可无缝平铺的噪声（stitchTiles=stitch 保证接缝不露）。
+   它是「材质」不是「图案」——不成形、不产生结构，所以不会和表格、发丝线抢视线。
+   想更明显/更淡，只调 opacity 即可。 */
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.08;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+    background-size: 160px 160px;
+    background-repeat: repeat;
+}
+
 #app {
     position: relative;
     z-index: 1;

@@ -158,5 +158,5 @@ function resetSearch() {
 	loadList()
 }
 
-// onMounted(loadList)
+onMounted(loadList)
 </script>
