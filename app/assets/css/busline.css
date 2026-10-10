@@ -6,6 +6,63 @@
     color: var(--ink-light);
 }
 
+/* ── 循环拉取：重操作，独立次级面板（琥珀色警示边界） ── */
+.buslines .loop-panel {
+    margin-top: 20px;
+    padding: 16px 24px 18px;
+    border-color: color-mix(in srgb, var(--bl-ochre) 24%, transparent);
+    border-left: 3px solid var(--bl-ochre);
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--bl-ochre) 6%, var(--paper)),
+        var(--paper) 55%);
+}
+
+.buslines .loop-panel.running {
+    border-color: color-mix(in srgb, var(--bl-ochre) 42%, transparent);
+    border-left-color: var(--bl-ochre);
+}
+
+.buslines .loop-head {
+    margin-bottom: 14px;
+}
+
+.buslines .loop-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.buslines .loop-title::before {
+    content: '';
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bl-ochre);
+}
+
+.buslines .loop-sub {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--ink-light);
+}
+
+.buslines .loop-body {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.buslines .loop-body .el-button + .el-button {
+    margin-left: 0;
+}
+
 /* ── 循环任务进度 ── */
 .buslines .run {
     margin-top: 20px;
@@ -151,13 +208,6 @@
     background: var(--sky);
 }
 
-/* 详细时间列预览截断 */
-.buslines .ellipsis {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
 /* ── 状态徽章：1=正常 2=规划中 3=在建（0=停运用基础灰） ── */
 .buslines .status-1 { color: var(--bl-sage); background: color-mix(in srgb, var(--bl-sage) 13%, #fff); }
 .buslines .status-2 { color: var(--sky-accent); background: var(--sky); }
@@ -252,7 +302,8 @@
 /* ── 响应式（本页特有部分） ── */
 @media (max-width: 760px) {
     .buslines .run,
-    .buslines .detail {
+    .buslines .detail,
+    .buslines .loop-panel {
         padding-left: 16px;
         padding-right: 16px;
     }

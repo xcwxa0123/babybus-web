@@ -9,7 +9,7 @@
 			<p class="page-meta">共 {{ total }} 条线路，城市 {{ city }}</p>
 		</div>
 
-		<!-- 操作区：拉取入库 / 查询 / 循环拉取 -->
+		<!-- 操作区：拉取入库 / 查询 -->
 		<section class="panel tools">
 			<div class="tool-row">
 				<div class="tool-name">拉取入库<span>按关键词获取线路并保存</span></div>
@@ -29,19 +29,21 @@
 					<el-button @click="loadList">刷新列表</el-button>
 				</div>
 			</div>
+		</section>
 
-			<div class="tool-row">
-				<div class="tool-name">循环拉取<span>按 keyword 区间依次拉取</span></div>
-				<div class="tool-fields">
-					<el-input v-model="loopStart" class="w-xs" placeholder="起始keyword" />
-					<span class="range-sep">~</span>
-					<el-input v-model="loopEnd" class="w-xs" placeholder="截止keyword" />
-					<el-button type="warning" :disabled="loopRunning" @click="startLoopTask">
-						循环拉取脚本任务
-					</el-button>
-					<el-button v-if="loopRunning" type="danger" plain
-						@click="() => { stopLoopTask(); stopClick = true }">停止</el-button>
-				</div>
+		<!-- 循环拉取：重操作，独立次级面板（会持续消耗接口配额，可随时停止） -->
+		<section class="panel loop-panel" :class="{ running: loopRunning }">
+			<div class="loop-head">
+				<div class="loop-title">循环拉取脚本任务</div>
+				<div class="loop-sub">按 keyword 区间依次拉取并入库，会持续消耗接口配额，可随时停止</div>
+			</div>
+			<div class="loop-body">
+				<el-input v-model="loopStart" class="w-xs" placeholder="起始keyword" />
+				<span class="range-sep">~</span>
+				<el-input v-model="loopEnd" class="w-xs" placeholder="截止keyword" />
+				<el-button type="warning" :disabled="loopRunning" @click="startLoopTask">开始拉取</el-button>
+				<el-button v-if="loopRunning" type="danger" plain
+					@click="() => { stopLoopTask(); stopClick = true }">停止</el-button>
 			</div>
 		</section>
 
