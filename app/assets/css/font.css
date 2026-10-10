@@ -1,0 +1,15 @@
+/* ═══════════ 本地字体（@fontsource，构建时打包，运行时不依赖字体 CDN） ═══════════
+   字重与项目实际用量对齐：
+   - Noto Serif SC：页面标题 / 线路名等衬线标题（300/400/600/700）
+   - Noto Sans SC ：正文（300/400/500）
+   - Playfair Display：英文斜体点缀（700 正体 + 400 斜体）
+   各 css 内部按 unicode-range 分片，浏览器只按需下载实际用到的 woff2 */
+@import '@fontsource/noto-serif-sc/300.css';
+@import '@fontsource/noto-serif-sc/400.css';
+@import '@fontsource/noto-serif-sc/600.css';
+@import '@fontsource/noto-serif-sc/700.css';
+@import '@fontsource/noto-sans-sc/300.css';
+@import '@fontsource/noto-sans-sc/400.css';
+@import '@fontsource/noto-sans-sc/500.css';
+@import '@fontsource/playfair-display/700.css';
+@import '@fontsource/playfair-display/400-italic.css';

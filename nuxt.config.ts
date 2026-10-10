@@ -3,20 +3,13 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-04-16',
   devtools: { enabled: true },
   css: [
-    // '~/assets/css/font.css',
+    '~/assets/css/font.css',   // 本地字体（@fontsource），替代 fonts.font.im 外链
     '~/assets/css/main.css',
 
   ],
   modules: ['@element-plus/nuxt', '@pinia/nuxt'],
   app: {
     head: {
-      link: [
-        { rel: 'preconnect', href: 'https://fonts.font.im' },
-        {
-          rel: 'stylesheet',
-          href: 'https://fonts.font.im/css2?family=Noto+Serif+SC:wght@300;400;600;700&family=Noto+Sans+SC:wght@300;400;500&family=Playfair+Display:ital,wght@0,700;1,400&display=swap'
-        }
-      ],
       title: 'soymilk'
     }
   },
