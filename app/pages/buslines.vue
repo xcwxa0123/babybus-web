@@ -156,7 +156,8 @@
 			</div>
 			<ol class="stops">
 				<li v-for="(s, i) in detail.busstops" :key="i">
-					<span class="stop-no" :style="{ background: colorOf(detail.uicolor) }">{{ Number(i) + 1 }}</span>
+					<span class="stop-no"
+						:style="{ background: colorOf(detail.uicolor), color: contrastOn(detail.uicolor) }">{{ Number(i) + 1 }}</span>
 					<div>
 						<div class="stop-name">{{ s.name }}</div>
 						<div class="stop-loc">{{ s.location }}</div>
@@ -324,6 +325,19 @@ function colorOf(c: any): string {
 	const s = String(c ?? '').trim()
 	if (!s) return ''
 	return /^[0-9a-fA-F]{6}$/.test(s) ? `#${s}` : s
+}
+
+// 站点序号底色取自线路 UI 色，浅色底上白字会糊掉——
+// 按 YIQ 亮度自动在白字与墨色字之间切换（色值无法解析时回退白字）
+function contrastOn(c: any): string {
+	const m = /^#?([0-9a-fA-F]{6})$/.exec(colorOf(c))
+	if (!m || !m[1]) return '#fff'
+	const v = parseInt(m[1], 16)
+	const r = (v >> 16) & 255
+	const g = (v >> 8) & 255
+	const b = v & 255
+	const yiq = (r * 299 + g * 587 + b * 114) / 1000
+	return yiq > 150 ? 'var(--ink)' : '#fff'
 }
 
 function statusText(status: any): string {

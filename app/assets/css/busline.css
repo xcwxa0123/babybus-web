@@ -287,6 +287,8 @@
     color: #fff;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
+    /* 底色可能被线路 UI 色换成接近纸白的值，加一道发丝内描边保证药丸轮廓不消失 */
+    box-shadow: inset 0 0 0 1px rgba(44, 36, 22, 0.12);
 }
 
 .buslines .stop-name {
