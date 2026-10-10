@@ -193,8 +193,8 @@ footer {
     font-family: 'Noto Sans SC', sans-serif !important;
 }
 
-/* ═══════════ 数据页共用骨架（buslines / markDone / citycodes 三页共用） ═══════════
-   仅单一页面使用的样式分别在 busline.css / markDone.css / citycodes.css 中：
+/* ═══════════ 数据页共用骨架（buslines / markdone / citycodes 三页共用） ═══════════
+   仅单一页面使用的样式分别在 busline.css / markdone.css / citycodes.css 中：
    .panel / .line-name / .detail-title 等类名与 Map.vue 的 scoped 同名类冲突，
    必须挂在页面根类命名空间下，不能裸全局化。 */
 
@@ -626,7 +626,7 @@ footer {
     min-width: 100cqw;
 }
 
-/* 状态徽章基础样式（buslines / markDone 共用，各状态色见各自页面 css） */
+/* 状态徽章基础样式（buslines / markdone 共用，各状态色见各自页面 css） */
 .buslines .status,
 .markdone .status {
     display: inline-block;
