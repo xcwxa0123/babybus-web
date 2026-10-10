@@ -1,0 +1,445 @@
+/* ═══════════ 控制台首页（index.vue / dashboard）特有样式 ═══════════
+   页面骨架、主题变量、柔光与颗粒背景见 index.css；本文件只写本页特有部分。
+   图标容器一律用「虚线描边 + 透明底 + 单色线条」，不引入任何彩色图标。 */
+
+.dashboard {
+    /* 本页用到的语义色，命名与 busline.css 对齐 */
+    --bl-sage: #55805b;
+    --bl-ochre: #a9701f;
+
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 44px 40px 64px;
+}
+
+/* ── 欢迎条 ── */
+.dashboard .welcome-band {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 28px 36px;
+    margin-bottom: 36px;
+    background: var(--paper);
+    border: 1px solid rgba(180, 160, 120, 0.14);
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+/* 左侧一道天蓝竖条，作为首页的强调 */
+.dashboard .welcome-band::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--sky-accent), var(--sky-mid));
+}
+
+.dashboard .welcome-time {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    color: var(--sky-accent);
+}
+
+.dashboard .welcome-time::before {
+    content: '';
+    display: inline-block;
+    width: 18px;
+    height: 1px;
+    background: var(--sky-accent);
+}
+
+.dashboard .welcome-title {
+    margin-bottom: 8px;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.dashboard .welcome-sub {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-light);
+}
+
+.dashboard .welcome-right {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    flex: none;
+}
+
+.dashboard .quick-stat {
+    text-align: center;
+}
+
+.dashboard .qs-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--sky-accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard .qs-lbl {
+    margin-top: 8px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--ink-faint);
+}
+
+/* ── 区块标题 ── */
+.dashboard .sec-header {
+    margin-bottom: 18px;
+}
+
+.dashboard .sec-eyebrow {
+    margin-bottom: 5px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    color: var(--sky-accent);
+}
+
+.dashboard .sec-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+/* ── 模块网格 ── */
+.dashboard .module-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 36px;
+}
+
+.dashboard .module-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 22px 20px;
+    background: var(--paper);
+    border: 1px solid rgba(180, 160, 120, 0.14);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.3s ease,
+        border-color 0.3s ease;
+}
+
+/* 底部一条强调线，hover 时从左向右展开 */
+.dashboard .module-card::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--sky-accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+}
+
+.dashboard .module-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+    border-color: rgba(180, 160, 120, 0.24);
+}
+
+.dashboard .module-card:hover::after {
+    transform: scaleX(1);
+}
+
+/* 图标容器：虚线描边 + 透明底 */
+.dashboard .module-icon-wrap {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 16px;
+    border: 1px dashed var(--sky-mid);
+    border-radius: 13px;
+    background: transparent;
+    color: var(--sky-accent);
+    transition: border-color 0.25s ease;
+}
+
+.dashboard .module-card:hover .module-icon-wrap {
+    border-color: var(--sky-accent);
+}
+
+.dashboard .module-name {
+    margin-bottom: 8px;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--ink);
+}
+
+.dashboard .module-desc {
+    flex: 1;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--ink-light);
+}
+
+.dashboard .module-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(180, 160, 120, 0.12);
+}
+
+.dashboard .module-tag {
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+
+.dashboard .tag-sky { color: var(--sky-accent); background: var(--sky); }
+.dashboard .tag-sage { color: var(--bl-sage); background: color-mix(in srgb, var(--bl-sage) 13%, #fff); }
+.dashboard .tag-warm { color: var(--bl-ochre); background: color-mix(in srgb, var(--bl-ochre) 13%, #fff); }
+.dashboard .tag-rose { color: var(--rose-accent); background: color-mix(in srgb, var(--rose-accent) 13%, #fff); }
+
+.dashboard .module-arrow {
+    color: var(--ink-faint);
+    transition: color 0.22s ease, transform 0.22s ease;
+}
+
+.dashboard .module-card:hover .module-arrow {
+    color: var(--sky-accent);
+    transform: translateX(3px);
+}
+
+/* ── 底部双面板 ── */
+.dashboard .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.dashboard .panel {
+    background: var(--paper);
+    border: 1px solid rgba(180, 160, 120, 0.14);
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.dashboard .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 22px 14px;
+    background: rgba(243, 237, 226, 0.5);
+    border-bottom: 1px solid rgba(180, 160, 120, 0.12);
+}
+
+.dashboard .panel-lbl {
+    margin-bottom: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    color: var(--sky-accent);
+}
+
+.dashboard .panel-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.dashboard .panel-more {
+    flex: none;
+    font-size: 12px;
+    color: var(--ink-faint);
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.dashboard .panel-more:hover {
+    color: var(--sky-accent);
+}
+
+.dashboard .panel-body {
+    padding: 12px 18px 16px;
+}
+
+/* 拉取进度 */
+.dashboard .task-item {
+    padding: 11px 4px;
+}
+
+.dashboard .task-item + .task-item {
+    border-top: 1px solid rgba(180, 160, 120, 0.1);
+}
+
+.dashboard .task-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.dashboard .task-city {
+    font-family: 'Playfair Display', serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--ink);
+}
+
+.dashboard .task-num {
+    font-size: 12px;
+    color: var(--ink-light);
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard .prog-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(180, 160, 120, 0.16);
+    overflow: hidden;
+}
+
+.dashboard .prog-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--sky-accent), var(--sky-mid));
+    transition: width 0.4s ease;
+}
+
+.dashboard .task-time {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 最近入库 */
+.dashboard .recent-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.dashboard .recent-row:hover {
+    background: rgba(218, 234, 247, 0.45);
+}
+
+.dashboard .recent-swatch {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+    box-shadow: 0 0 0 1px rgba(44, 36, 22, 0.15);
+}
+
+.dashboard .recent-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.dashboard .recent-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dashboard .recent-meta {
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--ink-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dashboard .recent-time {
+    flex: none;
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard .mini-empty {
+    padding: 30px 8px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--ink-light);
+}
+
+/* ── 响应式 ── */
+@media (max-width: 1100px) {
+    .dashboard .module-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .dashboard .bottom-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard .welcome-band {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 20px;
+    }
+}
+
+@media (max-width: 760px) {
+    .dashboard {
+        padding: 24px 20px 48px;
+    }
+
+    .dashboard .welcome-band {
+        padding: 22px 24px;
+    }
+
+    .dashboard .welcome-right {
+        gap: 26px;
+    }
+}
+
+@media (max-width: 560px) {
+    .dashboard .module-grid {
+        grid-template-columns: 1fr;
+    }
+}
