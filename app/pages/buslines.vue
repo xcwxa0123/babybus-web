@@ -75,7 +75,7 @@
 
 		<!-- 线路列表 -->
 		<section class="panel table-panel">
-			<el-table v-loading="loading" :data="list" :row-class-name="rowClass" @row-click="showDetail">
+			<el-table v-loading="loading" :data="list" :row-class-name="rowClass" @row-click="onRowClick">
 				<template #empty>
 					<div class="empty">
 						<div class="empty-icon"></div>
@@ -83,54 +83,48 @@
 						<div class="empty-sub">填写关键词后点击「拉取并入库」，或调整查询条件试试</div>
 					</div>
 				</template>
-				<el-table-column prop="name" label="线路名" min-width="140" fixed show-overflow-tooltip>
+
+				<!-- 展开行：低频 / 长文本字段收在这里，主表只留高频列 -->
+				<el-table-column type="expand" width="44" class-name="col-center" label-class-name="col-center">
+					<template #default="{ row }">
+						<div class="row-info">
+							<div class="ri-item"><span class="ri-k">线路ID</span><span class="ri-v">{{ row.id || '-' }}</span></div>
+							<div class="ri-item"><span class="ri-k">城市code</span><span class="ri-v">{{ row.citycode || '-' }}</span></div>
+							<div class="ri-item"><span class="ri-k">环线</span><span class="ri-v">{{ row.loop === 1 ? '是' : '否' }}</span></div>
+							<div class="ri-item"><span class="ri-k">公司</span><span class="ri-v">{{ row.company || '-' }}</span></div>
+							<div class="ri-item"><span class="ri-k">全程价</span><span class="ri-v">{{ row.total_price ?? '-' }}</span></div>
+							<div class="ri-item"><span class="ri-k">里程</span><span class="ri-v">{{ row.distance ?? '-' }} km</span></div>
+							<div class="ri-item"><span class="ri-k">UI色</span><span class="ri-v"><span v-if="row.uicolor" class="swatch" :style="{ background: colorOf(row.uicolor) }" />{{ row.uicolor || '-' }}</span></div>
+							<div class="ri-item"><span class="ri-k">创建时间</span><span class="ri-v">{{ row.created_at || '-' }}</span></div>
+							<div class="ri-item ri-wide"><span class="ri-k">详细时间</span><span class="ri-v pre">{{ formatTimeDesc(row.timedesc) }}</span></div>
+							<div class="ri-item ri-wide"><span class="ri-k">反向ID</span><span class="ri-v">{{ row.direc || '-' }}</span></div>
+							<div class="ri-item ri-wide"><span class="ri-k">矩形区域</span><span class="ri-v">{{ row.bounds || '-' }}</span></div>
+							<div class="ri-item ri-wide"><span class="ri-k">坐标串</span><span class="ri-v">{{ row.polyline || '-' }}</span></div>
+						</div>
+					</template>
+				</el-table-column>
+
+				<el-table-column prop="name" label="线路名" min-width="160" show-overflow-tooltip>
 					<template #default="{ row }">
 						<span class="line-name">{{ row.name }}</span>
 					</template>
 				</el-table-column>
-				<el-table-column prop="id" label="线路ID" min-width="200" show-overflow-tooltip />
-				<el-table-column prop="type" label="类型" min-width="80" />
-				<el-table-column prop="citycode" label="城市code" width="90" />
-				<el-table-column prop="start_stop" label="首发站" min-width="110" show-overflow-tooltip />
-				<el-table-column prop="end_stop" label="末站" min-width="110" show-overflow-tooltip />
-				<el-table-column prop="start_time" label="首班" width="80" />
-				<el-table-column prop="end_time" label="末班" width="80" />
-				<el-table-column label="状态" width="90">
+				<el-table-column prop="type" label="类型" width="90" class-name="col-center"
+					label-class-name="col-center" />
+				<el-table-column prop="start_stop" label="首发站" min-width="130" show-overflow-tooltip />
+				<el-table-column prop="end_stop" label="末站" min-width="130" show-overflow-tooltip />
+				<el-table-column prop="start_time" label="首班" width="90" class-name="col-center"
+					label-class-name="col-center" />
+				<el-table-column prop="end_time" label="末班" width="90" class-name="col-center"
+					label-class-name="col-center" />
+				<el-table-column prop="basic_price" label="起步价" width="90" class-name="col-num"
+					label-class-name="col-num" />
+				<el-table-column label="状态" width="90" class-name="col-center" label-class-name="col-center">
 					<template #default="{ row }">
 						<span class="status" :class="`status-${row.status}`">{{ statusText(row.status) }}</span>
 					</template>
 				</el-table-column>
-				<el-table-column label="环线" width="70">
-					<template #default="{ row }">
-						{{ row.loop === 1 ? '是' : '否' }}
-					</template>
-				</el-table-column>
-				<el-table-column prop="company" label="公司" min-width="120" show-overflow-tooltip />
-				<el-table-column prop="basic_price" label="起步价" width="80" />
-				<el-table-column prop="total_price" label="全程价" width="80" />
-				<el-table-column prop="distance" label="里程(km)" width="90" />
-				<el-table-column label="UI色" width="110">
-					<template #default="{ row }">
-						<span v-if="row.uicolor" class="swatch" :style="{ background: colorOf(row.uicolor) }" />
-						{{ row.uicolor || '-' }}
-					</template>
-				</el-table-column>
-				<el-table-column label="详细时间" min-width="180">
-					<template #default="{ row }">
-						<el-tooltip placement="top" :show-after="300" effect="light" popper-class="bl-popper">
-							<template #content>
-								<div style="white-space: pre-line; max-width: 420px">{{ formatTimeDesc(row.timedesc) }}
-								</div>
-							</template>
-							<div class="ellipsis">{{ timeDescPreview(row.timedesc) }}</div>
-						</el-tooltip>
-					</template>
-				</el-table-column>
-				<el-table-column prop="direc" label="反向ID" min-width="180" show-overflow-tooltip />
-				<el-table-column prop="bounds" label="矩形区域" min-width="180" show-overflow-tooltip />
-				<el-table-column prop="polyline" label="坐标串" min-width="180" show-overflow-tooltip />
-				<el-table-column prop="created_at" label="创建时间" width="170" />
-				<el-table-column label="操作" width="150" fixed="right">
+				<el-table-column label="操作" width="150" class-name="col-center" label-class-name="col-center">
 					<template #default="{ row }">
 						<el-button size="small" @click.stop="openEdit(row)">编辑</el-button>
 						<el-button size="small" type="danger" @click.stop="removeLine(row)">删除</el-button>
@@ -271,6 +265,12 @@ async function showDetail(data: any) {
 	detailRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+// 行点击：点展开箭头时只展开字段面板，不加载站点详情
+function onRowClick(row: any, _column: any, event: MouseEvent) {
+	if ((event?.target as HTMLElement)?.closest?.('.el-table__expand-icon')) return
+	showDetail(row)
+}
+
 function onSearch() {
 	page.value = 1 // 搜索时回到第一页
 	loadList()
@@ -327,13 +327,6 @@ function colorOf(c: any): string {
 function statusText(status: any): string {
 	const map: Record<number, string> = { 0: '停运', 1: '正常', 2: '规划中', 3: '在建' }
 	return map[Number(status)] ?? String(status ?? '-')
-}
-
-// 列表预览：只取详细时间的第一行
-function timeDescPreview(raw: any): string {
-	const full = formatTimeDesc(raw)
-	const lines = String(full).split('\n').filter(Boolean)
-	return lines[0] ?? ''
 }
 
 // 详细时间字段是「URL 编码的 JSON 串」，拆成可读的排班描述

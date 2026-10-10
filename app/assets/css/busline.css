@@ -76,6 +76,72 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* ── 表格对齐：默认文本左对齐（覆盖 index.css 的全局居中）；
+      数字列右对齐、状态/操作等居中——列上通过 class-name 挂 col-num / col-center ── */
+.buslines .table-panel .el-table th.el-table__cell,
+.buslines .table-panel .el-table td.el-table__cell {
+    text-align: left;
+}
+
+.buslines .table-panel .el-table th.col-num.el-table__cell,
+.buslines .table-panel .el-table td.col-num.el-table__cell {
+    text-align: right;
+}
+
+.buslines .table-panel .el-table th.col-center.el-table__cell,
+.buslines .table-panel .el-table td.col-center.el-table__cell {
+    text-align: center;
+}
+
+/* ── 行展开：低频 / 长文本字段面板 ── */
+.buslines .table-panel .el-table .el-table__expand-icon {
+    color: var(--ink-light);
+}
+
+.buslines .table-panel .el-table .el-table__expand-icon:hover {
+    color: var(--sky-accent);
+}
+
+.buslines .table-panel .el-table .el-table__expanded-cell,
+.buslines .table-panel .el-table .el-table__expanded-cell:hover {
+    padding: 0;
+    background: var(--cream);
+}
+
+.buslines .row-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px 28px;
+    padding: 16px 20px 18px 48px;
+}
+
+.buslines .ri-item {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+.buslines .ri-k {
+    flex: none;
+    width: 60px;
+    color: var(--ink-light);
+}
+
+.buslines .ri-v {
+    color: var(--ink-mid);
+    word-break: break-all;
+}
+
+.buslines .ri-v.pre {
+    white-space: pre-line;
+}
+
+.buslines .ri-wide {
+    grid-column: 1 / -1;
+}
+
 /* ── 列表：行可点击 + 选中行高亮 ── */
 .buslines .table-panel .el-table .el-table__row {
     cursor: pointer;
@@ -94,7 +160,7 @@
 
 /* ── 状态徽章：1=正常 2=规划中 3=在建（0=停运用基础灰） ── */
 .buslines .status-1 { color: var(--bl-sage); background: color-mix(in srgb, var(--bl-sage) 13%, #fff); }
-.buslines .status-2 { color: #2f6a98; background: var(--sky); }
+.buslines .status-2 { color: var(--sky-accent); background: var(--sky); }
 .buslines .status-3 { color: var(--bl-ochre); background: color-mix(in srgb, var(--bl-ochre) 13%, #fff); }
 
 /* UI 色小圆点 */
