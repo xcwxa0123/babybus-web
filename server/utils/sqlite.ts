@@ -70,13 +70,16 @@ function initTables(database: Database.Database) {
         CREATE INDEX IF NOT EXISTS idx_seq_bus ON bus_stop_sequences (bus_id, seq);
         CREATE INDEX IF NOT EXISTS idx_bus_lines_citycode_name ON bus_lines (citycode, name);
 
-        -- 高德城市编码表（name / adcode / citycode 对照）
+        -- 高德城市编码表（name / adcode / citycode 对照 + 行政区层级与边界）
         CREATE TABLE IF NOT EXISTS city_codes (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            name       TEXT NOT NULL,          -- 城市/区县名称
-            adcode     TEXT,                   -- 行政区划编码（保留前导零）
-            citycode   TEXT,                   -- 城市电话区号（可能为空）
-            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT NOT NULL,          -- 城市/区县名称
+            adcode        TEXT,                   -- 行政区划编码（保留前导零）
+            citycode      TEXT,                   -- 城市电话区号（可能为空）
+            parent_adcode TEXT,                   -- 上级行政区 adcode（省级为 NULL）
+            level         TEXT,                   -- province / city / district / street
+            polyline      TEXT,                   -- 行政区边界，环内 ; 分隔、环间 | 分隔
+            created_at    TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         );
 
         CREATE INDEX IF NOT EXISTS idx_city_codes_adcode ON city_codes (adcode);
@@ -126,4 +129,32 @@ function initTables(database: Database.Database) {
         INSERT OR IGNORE INTO done_num_citycode (citycode, done_num) 
             SELECT DISTINCT citycode, 0 FROM city_codes WHERE citycode IS NOT NULL;
     `)
+
+    // 幂等补列：老库补上缺的列，新库（CREATE TABLE 里已声明）自动跳过
+    ensureColumns(database)
+
+    // 依赖新增列的索引必须放在补列之后，否则老库会因为列不存在而报错
+    database.exec(`
+        CREATE INDEX IF NOT EXISTS idx_city_codes_parent ON city_codes (parent_adcode);
+    `)
+}
+
+// 幂等补列：
+// CREATE TABLE IF NOT EXISTS 对已存在的表是空操作，所以只往建表语句里加列，只对全新库生效，
+// 老库必须走 ALTER TABLE ADD COLUMN 补。以后加列往 wanted 里加一行即可。
+// 注意 ADD COLUMN 的限制：不能带 PRIMARY KEY / UNIQUE；带 NOT NULL 必须同时给常量默认值；
+// 默认值也不能是 (datetime('now','localtime')) 这类表达式（那种列只能先加可空列再回填）。
+function ensureColumns(database: Database.Database) {
+    const wanted: Array<[string, string, string]> = [
+        // [表, 列名, 列定义]
+        ['city_codes', 'parent_adcode', 'parent_adcode TEXT'],
+        ['city_codes', 'level', 'level TEXT'],
+        ['city_codes', 'polyline', 'polyline TEXT'],
+    ]
+    for (const [table, column, ddl] of wanted) {
+        const cols = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+        if (!cols.some((c) => c.name === column)) {
+            database.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
+        }
+    }
 }

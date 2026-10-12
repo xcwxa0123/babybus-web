@@ -216,7 +216,7 @@ const doLogin = async () => {
         authStore.login(res.data.token)
         authStore.setUserInfo(res.data.user)
         ElMessage({ message: '登录成功，正在跳转…', type: 'success', duration: 1200 });
-        router.push({ path: '/index' })
+        router.push({ path: '/' })
     } else {
         ElMessage({ message: `登录失败捏！${ res.msg }`, type: 'error', duration: 1500 });
     }

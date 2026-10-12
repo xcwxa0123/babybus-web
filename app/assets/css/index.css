@@ -203,6 +203,7 @@ footer {
 .buslines,
 .markdone,
 .citycodes,
+.districts,
 .app-dialog,
 .el-message-box,
 .bl-popper {
@@ -397,6 +398,16 @@ footer {
 
 .el-overlay .el-message-box .el-message-box__headerbtn:hover .el-message-box__close {
     color: var(--sky-accent);
+}
+
+/* ── ElMessage 层级兜底 ──
+   EP 的 message 是「渲染时先读 currentZIndex、到 onMounted 才 nextZIndex()」，
+   于是它拿到的 z-index 恰好等于「刚刚创建的那个遮罩（弹窗）」——两者相等；
+   而 message 容器通常早于弹窗的 overlay 挂到 body，平局时就排在了弹窗后面。
+   这是 message 与 dialog 共用同一个 z-index 计数器导致的既有行为，
+   靠 ElConfigProvider 调 zIndex 只会把两边一起抬高、依旧平局，所以这里兜一个足够高的值。 */
+.el-message {
+    z-index: 5000 !important;
 }
 
 /* ── 页面骨架 ── */
