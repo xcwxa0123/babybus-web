@@ -702,6 +702,8 @@ async function submitImport() {
 // 沿用「循环拉取线路」那套：前端驱动、每条之间节流、可随时停。
 // 好处是进度与日志天然实时，后端不用起任务队列；代价是页面得开着别关。
 const CRAWL_DEFAULT_INTERVAL = 2000
+// 被限流时同一条最多试几次；试完仍失败就记一次失败往下走，不卡死在这里
+const CRAWL_MAX_RETRY = 3
 
 const crawlRunning = ref(false)
 const crawlScope = ref('missing')   // missing=只补未录入 / all=全部重爬
@@ -764,10 +766,21 @@ async function startCrawl() {
 		crawlCurrent.value = `${it.adcode} ${it.name}`
 		crawlStats.value.total++
 
-		const r: any = await request('/api/citycodes/districts/fetchPolyline', {
-			method: 'POST',
-			body: { adcode: it.adcode }
-		})
+		// 撞上限流（高德 10021 并发超限这类瞬时错误）就退避重试，别当失败也别停任务
+		let r: any = null
+		for (let attempt = 1; attempt <= CRAWL_MAX_RETRY; attempt++) {
+			r = await request('/api/citycodes/districts/fetchPolyline', {
+				method: 'POST',
+				body: { adcode: it.adcode }
+			})
+			if (r?.code === 503 && attempt < CRAWL_MAX_RETRY) {
+				const backoff = Math.max(interval * 5, 5000)
+				crawlPush(`… ${it.adcode} ${it.name} 被限流，等 ${Math.round(backoff / 1000)}s 重试（第 ${attempt} 次）`)
+				await sleep(backoff)
+				continue
+			}
+			break
+		}
 
 		if (r?.code === 200) {
 			crawlStats.value.saved++
@@ -777,12 +790,12 @@ async function startCrawl() {
 			// 高德只对省 / 市 / 区下发边界，街道级大多是空的，属于正常结果而不是错误
 			crawlStats.value.empty++
 			crawlPush(`· ${it.adcode} ${it.name}：高德未返回边界`)
-		} else if (r?.code === 429 && r.data?.quota) {
-			// 配额类错误：继续跑只会把剩下的几百个请求也白打光，直接停。
+		} else if (r?.code === 429) {
+			// 致命错误（配额打光 / KEY 有问题）：继续跑只会把剩下的几百个请求也白打光，直接停。
 			// 置 false 靠循环头的判断退出，这样当前这条的进度照常记上。
 			crawlStats.value.failed++
 			crawlPush(`✗ ${it.adcode} ${it.name}：${r.msg ?? '配额已用尽'}`)
-			stopReason = `配额用尽，停在第 ${i + 1} 条`
+			stopReason = `任务中断，停在第 ${i + 1} 条`
 			crawlRunning.value = false
 		} else {
 			crawlStats.value.failed++
