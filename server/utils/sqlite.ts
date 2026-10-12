@@ -86,6 +86,40 @@ function initTables(database: Database.Database) {
         CREATE INDEX IF NOT EXISTS idx_city_codes_citycode ON city_codes (citycode);
         CREATE INDEX IF NOT EXISTS idx_city_codes_name ON city_codes (name);
 
+        -- 站点 → 行政区 的归属（几何判断只在这一层做一次）
+        -- 一个站点正常只落在一个区县里；复合主键是为了万一将来边界数据交叠时不丢信息，
+        -- 真出现同一个 stop_id 有多行，那就是数据质量的信号，值得去看一眼。
+        CREATE TABLE IF NOT EXISTS bus_stop_area (
+            stop_id TEXT NOT NULL,
+            adcode  TEXT NOT NULL,
+            level   TEXT,
+            PRIMARY KEY (stop_id, adcode)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bus_stop_area_adcode ON bus_stop_area (adcode);
+
+        -- 线路 → 行政区 的对应关系（中间表，由 bus_stop_area 纯 SQL 派生）
+        --   stop_num  该区内有几个「不同」站点（环线重复停靠只算一次）
+        --   first_seq 首次停靠的站序，用来体现行进方向
+        --   is_start  该区含始发站
+        --   is_end    该区含终到站
+        -- 「途经」= is_start 与 is_end 都为 0。
+        -- 用两个布尔而不是单一 role 字段：环线的首末站常落在同一个区（甚至同一站），
+        -- 那种情况两列都为 1 才如实；压成一个字段就不得不在 start / end 之间强行选一个。
+        CREATE TABLE IF NOT EXISTS bus_line_area (
+            bus_id      TEXT    NOT NULL,
+            adcode      TEXT    NOT NULL,
+            level       TEXT,
+            stop_num    INTEGER NOT NULL,
+            first_seq   INTEGER NOT NULL,
+            is_start    INTEGER NOT NULL DEFAULT 0,
+            is_end      INTEGER NOT NULL DEFAULT 0,
+            computed_at TEXT,
+            PRIMARY KEY (bus_id, adcode)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bus_line_area_adcode ON bus_line_area (adcode, level);
+
         -- 用户名密码表
         CREATE TABLE IF NOT EXISTS users (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
