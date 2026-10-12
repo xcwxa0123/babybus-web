@@ -6,7 +6,10 @@
 				<h2 class="page-title"><span class="logo-dot" />公交线路本地库</h2>
 				<span class="logo-en">Local bus line library</span>
 			</div>
-			<p class="page-meta">共 {{ total }} 条线路，城市 {{ city }}</p>
+			<p class="page-meta">
+				<template v-if="selectedArea">{{ selectedArea.name }}：共 {{ total }} 条线路</template>
+				<template v-else>共 {{ total }} 条线路，城市 {{ city }}</template>
+			</p>
 		</div>
 
 		<!-- 操作区：拉取入库 / 查询 -->
@@ -20,7 +23,7 @@
 				</div>
 			</div>
 
-			<div class="tool-row">
+			<!-- <div class="tool-row">
 				<div class="tool-name">查询<span>搜索线路或站点</span></div>
 				<div class="tool-fields">
 					<el-input v-model="searchText" class="w-lg" placeholder="搜索线路/站点" clearable
@@ -28,7 +31,7 @@
 					<el-button type="primary" plain @click="onSearch">查询</el-button>
 					<el-button @click="loadList">刷新列表</el-button>
 				</div>
-			</div>
+			</div> -->
 		</section>
 
 		<!-- 循环拉取：重操作，独立次级面板（会持续消耗接口配额，可随时停止） -->
@@ -75,14 +78,120 @@
 			</div>
 		</section>
 
+		<!-- 重建映射：纯本地计算，不消耗配额，每天爬完新线路点一次 -->
+		<section class="panel map-panel" :class="{ running: mapRunning }">
+			<div class="map-head">
+				<div class="map-title">重建「线路 ↔ 区域」映射</div>
+				<div class="map-sub">
+					按站点判断每条线路落在哪些区县，结果写入映射表。纯本地计算、不消耗高德配额，
+					每天爬完新线路后点一次即可，可随时停止；下次重跑会自动从头清表重建。
+				</div>
+			</div>
+			<div class="map-body">
+				<el-button type="warning" :disabled="mapRunning" @click="startMapping">开始映射</el-button>
+				<el-button v-if="mapRunning" type="danger" plain @click="mapStopped = true">停止</el-button>
+			</div>
+		</section>
+
+		<!-- 映射进度 -->
+		<section v-if="mapRunning || mapStats.total > 0" class="panel run">
+			<div class="run-head">
+				<div>
+					<div class="run-title">映射进度</div>
+					<div class="run-sub">
+						{{ mapRunning ? `正在处理第 ${mapDone + 1} 个区县` : '已结束' }}
+						· 已处理 {{ mapDone }} / {{ mapStats.total }} 个区县
+						· 每批 {{ MAP_BATCH }} 个
+					</div>
+				</div>
+				<el-tag :type="mapRunning ? 'warning' : 'success'" effect="light" round>
+					{{ mapPercent }}%
+				</el-tag>
+			</div>
+			<el-progress :percentage="mapPercent" :stroke-width="8" :status="mapRunning ? '' : 'success'" />
+			<div class="stats">
+				<div class="stat"><b>{{ mapDone }}</b><span>已处理区县</span></div>
+				<div class="stat ok"><b>{{ mapStats.stopAreas }}</b><span>站点归属行</span></div>
+				<div class="stat ok"><b>{{ mapStats.lineAreas }}</b><span>线路映射行</span></div>
+				<div class="stat bad"><b>{{ mapStats.linesUnmapped }}</b><span>未覆盖线路</span></div>
+			</div>
+			<div class="log">
+				<el-scrollbar max-height="200px">
+					<div v-for="(line, i) in mapLog" :key="i" class="log-line">{{ line }}</div>
+				</el-scrollbar>
+			</div>
+		</section>
+
+		<!-- 按行政区查线路：懒加载树，点行选中该区域 -->
+		<section class="panel area-panel">
+			<div class="area-head">
+				<div>
+					<div class="area-title">按行政区查线路</div>
+					<div class="area-sub">
+						点箭头逐层展开，点行即选中该区域 —— 省 / 市 / 区县任意一层都会汇总它下面所有区县的线路
+					</div>
+				</div>
+				<el-button v-if="selectedArea" text @click="clearArea">清除选择</el-button>
+			</div>
+			<el-table ref="areaTableRef" v-loading="areaLoading" :data="areaList" row-key="adcode" lazy
+				:load="loadAreaChildren" :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
+				:row-class-name="areaRowClass" max-height="340px" @row-click="onAreaClick">
+				<template #empty>
+					<div class="empty">
+						<div class="empty-icon"></div>
+						<div class="empty-title">没有区域数据</div>
+						<div class="empty-sub">先到「行政区边界管理」页导入一份行政区数据</div>
+					</div>
+				</template>
+				<el-table-column prop="name" label="区域" min-width="240">
+					<template #default="{ row }">
+						<span class="area-name">{{ row.name }}</span>
+					</template>
+				</el-table-column>
+				<el-table-column prop="adcode" label="adcode" width="110" class-name="col-center"
+					label-class-name="col-center" />
+				<el-table-column label="层级" width="100" class-name="col-center" label-class-name="col-center">
+					<template #default="{ row }">
+						<span class="lv" :class="`lv-${row.level || 'unknown'}`">{{ levelText(row.level) }}</span>
+					</template>
+				</el-table-column>
+				<el-table-column label="" width="80" class-name="col-center" label-class-name="col-center">
+					<template #default="{ row }">
+						<span v-if="selectedArea?.adcode === row.adcode" class="area-current">当前</span>
+					</template>
+				</el-table-column>
+			</el-table>
+		</section>
+
 		<!-- 线路列表 -->
-		<section class="panel table-panel">
+		<section ref="listPanelRef" class="panel table-panel">
+			<div class="list-head">
+				<div>
+					<div class="list-title">{{ selectedArea ? `${selectedArea.name} 的线路` : '全部线路' }}</div>
+					<div class="list-sub">
+						<template v-if="selectedArea">
+							adcode {{ selectedArea.adcode }} · 含下级区县 {{ areaInfo?.districts ?? 0 }} 个
+							· 命中 {{ total }} 条<template v-if="areaInfo && !areaInfo.hasBoundary"> · 该区域还没有边界</template>
+						</template>
+						<template v-else>关键词「{{ searchText || '（空）' }}」，城市 {{ city }}</template>
+					</div>
+				</div>
+				<el-button v-if="selectedArea" text @click="clearArea">返回全部线路</el-button>
+			</div>
 			<el-table v-loading="loading" :data="list" :row-class-name="rowClass" @row-click="onRowClick">
 				<template #empty>
 					<div class="empty">
 						<div class="empty-icon"></div>
-						<div class="empty-title">没有找到线路</div>
-						<div class="empty-sub">填写关键词后点击「拉取并入库」，或调整查询条件试试</div>
+						<template v-if="selectedArea">
+							<div class="empty-title">{{ selectedArea.name }} 下没有线路</div>
+							<div class="empty-sub">
+								该区域（及其下级区县）还没有映射数据 —— 先确认边界已爬，再点上方「开始映射」
+							</div>
+						</template>
+						<template v-else>
+							<div class="empty-title">没有找到线路</div>
+							<div class="empty-sub">填写关键词后点击「拉取并入库」，或调整查询条件试试</div>
+						</template>
 					</div>
 				</template>
 
@@ -124,6 +233,20 @@
 				<el-table-column label="状态" width="90" class-name="col-center" label-class-name="col-center">
 					<template #default="{ row }">
 						<span class="status" :class="`status-${row.status}`">{{ statusText(row.status) }}</span>
+					</template>
+				</el-table-column>
+
+				<!-- 选中区域后才有的两列：这条线在该区域内是什么角色、覆盖了多少 -->
+				<el-table-column v-if="selectedArea" label="角色" width="110" class-name="col-center"
+					label-class-name="col-center">
+					<template #default="{ row }">
+						<span class="role" :class="`role-${roleKey(row)}`">{{ roleText(row) }}</span>
+					</template>
+				</el-table-column>
+				<el-table-column v-if="selectedArea" label="覆盖" width="150" class-name="col-center"
+					label-class-name="col-center">
+					<template #default="{ row }">
+						<span class="cover">{{ row.areaCount }} 区 · {{ row.stopNum }} 站</span>
 					</template>
 				</el-table-column>
 				<el-table-column label="操作" width="150" class-name="col-center" label-class-name="col-center">
@@ -196,9 +319,44 @@
 const list = ref<any[]>([])
 const detail = ref<any>(null)
 const detailRef = ref<HTMLElement | null>(null)
+const listPanelRef = ref<HTMLElement | null>(null)
 const city = ref('0631')
 const keyword = ref('1')
 const searchText = ref('')
+
+// ---- 按行政区查线路 ----
+// 选中的区域（省 / 市 / 区县任意一层）。为 null 时列表就是原来的「全部线路」。
+const selectedArea = ref<any>(null)
+// byArea 接口带回来的区域信息（下级区县数、有没有边界）
+const areaInfo = ref<any>(null)
+
+const areaTableRef = ref<any>(null)
+const areaList = ref<any[]>([])
+const areaLoading = ref(false)
+
+const LEVEL_TEXT: Record<string, string> = {
+	country: '国家级', province: '省级', city: '市级', district: '区县级', street: '街道级'
+}
+
+function levelText(level: any): string {
+	return LEVEL_TEXT[String(level ?? '')] ?? '—'
+}
+
+// 这条线在选中区域里的角色。isStart / isEnd 都是 1 = 首末站都在这个范围内
+// （环线、短线很常见），不是「途经」。
+function roleText(row: any): string {
+	if (row?.isStart && row?.isEnd) return '始发+终到'
+	if (row?.isStart) return '始发'
+	if (row?.isEnd) return '终到'
+	return '途经'
+}
+
+function roleKey(row: any): string {
+	if (row?.isStart && row?.isEnd) return 'both'
+	if (row?.isStart) return 'start'
+	if (row?.isEnd) return 'end'
+	return 'via'
+}
 
 // ---- 分页状态 ----
 const page = ref(1)
@@ -213,16 +371,23 @@ const editForm = ref<any>({})
 async function loadList() {
 	loading.value = true
 	try {
-		const res = await request('/api/buslines', {
-			query: {
-				keyword: searchText.value,
-				citycode: city.value,
-				page: page.value,
-				pageSize: pageSize.value
-			}
-		})
+		// 两个模式：选中了区域就查该区域（含下级区县）的线路，否则维持原来的关键词 / 城市查询
+		const area = selectedArea.value
+		const res = area
+			? await request('/api/buslines/byArea', {
+				query: { adcode: area.adcode, page: page.value, pageSize: pageSize.value }
+			})
+			: await request('/api/buslines', {
+				query: {
+					keyword: searchText.value,
+					citycode: city.value,
+					page: page.value,
+					pageSize: pageSize.value
+				}
+			})
 		list.value = res.data ?? []
 		total.value = res.total ?? 0
+		areaInfo.value = res.area ?? null
 	} finally {
 		loading.value = false
 	}
@@ -545,9 +710,132 @@ async function loadNum(citycode = '') {
 	}
 }
 
+// ---- 行政区树 ----
+// 复用 districts 页的懒加载树接口：首层用 /districts（无筛选时默认给「中国」这一个根），
+// 展开某一层时才去取它的下级。
+async function loadAreaTree() {
+	areaLoading.value = true
+	try {
+		const res = await request('/api/citycodes/districts')
+		areaList.value = Array.isArray(res.data) ? res.data : []
+	} finally {
+		areaLoading.value = false
+	}
+}
+
+async function loadAreaChildren(row: any, _node: any, resolve: (rows: any[]) => void) {
+	if (!row?.adcode) {
+		resolve([])
+		return
+	}
+	const res = await request('/api/citycodes/districts/children', { query: { adcode: row.adcode } })
+	resolve(Array.isArray(res.data) ? res.data : [])
+}
+
+// 只有「选中」的那一行高亮。展开箭头点的是图标，EP 自己 stopPropagation，
+// 所以点箭头展开、点行选中，两者不冲突。
+function areaRowClass({ row }: { row: any }) {
+	return row?.adcode === selectedArea.value?.adcode ? 'is-current' : ''
+}
+
+async function onAreaClick(row: any) {
+	selectedArea.value = row
+	page.value = 1
+	await loadList()
+	await nextTick()
+	listPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function clearArea() {
+	selectedArea.value = null
+	areaInfo.value = null
+	page.value = 1
+	loadList()
+}
+
+// ---- 重建映射 ----
+// 分批调用后端：每批处理若干个区县，进度条因此是真实进度。
+// 第一批（offset=0）会清空两张表，最后一批之后由后端派生线路表。
+const MAP_BATCH = 150
+
+const mapRunning = ref(false)
+const mapStopped = ref(false)
+const mapDone = ref(0)
+const mapLog = ref<string[]>([])
+const mapStats = ref({ total: 0, stopAreas: 0, lineAreas: 0, linesUnmapped: 0 })
+
+const mapPercent = computed(() =>
+	mapStats.value.total ? Math.min(100, Math.round((mapDone.value / mapStats.value.total) * 100)) : 0
+)
+
+function mapPush(msg: string) {
+	const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+	mapLog.value.push(`[${time}] ${msg}`)
+	if (mapLog.value.length > 300) mapLog.value.shift()
+}
+
+async function startMapping() {
+	if (mapRunning.value) return
+	mapRunning.value = true
+	mapStopped.value = false
+	mapDone.value = 0
+	mapLog.value = []
+	mapStats.value = { total: 0, stopAreas: 0, lineAreas: 0, linesUnmapped: 0 }
+
+	let offset = 0
+	try {
+		// 兜底上限：正常情况下 offset 一定会推进到 total，这里只防意外死循环
+		for (let batch = 0; batch < 2000; batch++) {
+			if (mapStopped.value) {
+				mapPush('已手动停止（已处理的部分是有效的，重跑会清表重建）')
+				break
+			}
+
+			const res = await request('/api/buslines/rebuildAreaMapping', {
+				method: 'POST',
+				body: { offset, limit: MAP_BATCH }
+			})
+			if (res?.code !== 200) {
+				mapPush(`✗ 第 ${batch + 1} 批失败：${res?.msg ?? '未知错误'}`)
+				break
+			}
+
+			const d: any = res.data ?? {}
+			mapStats.value.total = d.total ?? mapStats.value.total
+			mapStats.value.stopAreas = d.stopAreas ?? 0
+			mapDone.value = (d.offset ?? 0) + (d.processed ?? 0)
+			// 后端一批都没处理说明已经到底了，避免原地打转
+			if (!d.processed) break
+
+			offset = mapDone.value
+
+			if (d.finished) {
+				mapStats.value.lineAreas = d.lineAreas ?? 0
+				mapStats.value.linesUnmapped = d.linesUnmapped ?? 0
+				mapPush(
+					`✓ 完成：${d.total} 个区县，线路映射 ${d.lineAreas} 行，` +
+					`覆盖 ${d.linesMapped} 条线路，未覆盖 ${d.linesUnmapped} 条`
+				)
+				if (d.multiAreaStops) {
+					mapPush(`⚠ 有 ${d.multiAreaStops} 个站点落在多个区县，建议查一下边界数据是否重叠`)
+				}
+				break
+			}
+
+			mapPush(`已处理 ${mapDone.value}/${mapStats.value.total} 个区县，站点归属累计 ${mapStats.value.stopAreas} 行`)
+		}
+	} finally {
+		mapRunning.value = false
+	}
+
+	// 映射结果变了，当前列表要重取（选中区域时尤其明显）
+	await loadList()
+}
+
 onMounted(async () => {
 	await loadNum()
 	await loadList()
+	await loadAreaTree()
 })
 
 // 页面卸载 / 路由离开时先终止循环轮询，避免请求还在后台继续跑

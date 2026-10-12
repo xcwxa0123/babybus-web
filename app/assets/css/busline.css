@@ -301,16 +301,243 @@
     color: var(--ink-light);
 }
 
+/* ── 重建映射：重操作，独立次级面板（与循环拉取同一套琥珀警示语言） ── */
+.buslines .map-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px 20px;
+    margin-top: 20px;
+    padding: 16px 24px 18px;
+    border-color: color-mix(in srgb, var(--bl-ochre) 24%, transparent);
+    border-left: 3px solid var(--bl-ochre);
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--bl-ochre) 6%, var(--paper)),
+        var(--paper) 55%);
+}
+
+.buslines .map-panel.running {
+    border-color: color-mix(in srgb, var(--bl-ochre) 42%, transparent);
+    border-left-color: var(--bl-ochre);
+}
+
+.buslines .map-head {
+    min-width: 0;
+}
+
+.buslines .map-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.buslines .map-title::before {
+    content: '';
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bl-ochre);
+}
+
+.buslines .map-sub {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--ink-light);
+}
+
+.buslines .map-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+}
+
+.buslines .map-body .el-button + .el-button {
+    margin-left: 0;
+}
+
+/* ── 按行政区查线路：懒加载树面板 ── */
+.buslines .area-panel {
+    margin-top: 20px;
+    padding: 18px 24px 20px;
+    overflow: hidden;
+}
+
+.buslines .area-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.buslines .area-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.buslines .area-sub {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--ink-light);
+}
+
+/* 树表格的取值对齐 index.css 里 .table-panel 那一套。
+   本页自带一份而不是往共用文件里加选择器：动 index.css 会波及 markdone。 */
+.buslines .area-panel .el-table {
+    --el-table-bg-color: var(--paper);
+    --el-table-tr-bg-color: var(--paper);
+    --el-table-header-bg-color: var(--cream-dark);
+    --el-table-header-text-color: var(--ink-mid);
+    --el-table-row-hover-bg-color: color-mix(in srgb, var(--sky) 45%, var(--paper));
+    --el-table-border-color: rgba(180, 160, 120, 0.14);
+    font-size: 13px;
+}
+
+.buslines .area-panel .el-table th.el-table__cell,
+.buslines .area-panel .el-table td.el-table__cell {
+    text-align: left;
+}
+
+.buslines .area-panel .el-table th.col-center.el-table__cell,
+.buslines .area-panel .el-table td.col-center.el-table__cell {
+    text-align: center;
+}
+
+.buslines .area-panel .el-table th.el-table__cell {
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.buslines .area-panel .el-table .el-table__row {
+    cursor: pointer;
+}
+
+/* 空态居中：原理与 index.css 里 .table-panel 那三条完全一致，
+   本页自带一份（同理，不动共用文件）。缺了它区域树的空态文本只有 50% 宽，
+   而且 SSR 首帧到 hydration 之间空态块没有 EP 内联的宽度，会收缩成内容宽贴着左边。 */
+.buslines .area-panel .el-table .el-table__empty-text {
+    width: 100%;
+}
+
+.buslines .area-panel .el-table .el-table__body-wrapper {
+    container-type: inline-size;
+}
+
+.buslines .area-panel .el-table .el-table__empty-block {
+    min-width: 100cqw;
+}
+
+/* 选中区域行高亮：与线路表选中行同一套天蓝底色 */
+.buslines .area-panel .el-table .el-table__body tr.is-current > td.el-table__cell {
+    background: var(--sky);
+}
+
+.buslines .area-name {
+    font-weight: 600;
+    color: var(--ink);
+}
+
+/* 层级徽章：配色沿用 districts 页那一套（省=赭黄 / 市=天蓝 / 区县=鼠尾草绿） */
+.buslines .lv {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ink-light);
+    background: var(--cream-dark);
+}
+
+.buslines .lv-province { color: var(--bl-ochre); background: color-mix(in srgb, var(--bl-ochre) 13%, #fff); }
+.buslines .lv-city { color: var(--sky-accent); background: color-mix(in srgb, var(--sky-accent) 13%, #fff); }
+.buslines .lv-district { color: var(--bl-sage); background: color-mix(in srgb, var(--bl-sage) 13%, #fff); }
+
+.buslines .lv-country,
+.buslines .lv-street,
+.buslines .lv-unknown {
+    color: var(--ink-light);
+    background: var(--cream-dark);
+}
+
+.buslines .area-current {
+    font-size: 12px;
+    color: var(--sky-accent);
+}
+
+/* ── 线路列表表头（说明当前是在看哪个区域） ── */
+.buslines .list-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 24px 14px;
+    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
+}
+
+.buslines .list-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.buslines .list-sub {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--ink-light);
+}
+
+/* 角色徽章：始发 / 终到 / 始发+终到 / 途经 */
+.buslines .role {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--ink-light);
+    background: var(--cream-dark);
+}
+
+.buslines .role-start { color: var(--bl-sage); background: color-mix(in srgb, var(--bl-sage) 13%, #fff); }
+.buslines .role-end { color: var(--sky-accent); background: color-mix(in srgb, var(--sky-accent) 13%, #fff); }
+.buslines .role-both { color: var(--bl-ochre); background: color-mix(in srgb, var(--bl-ochre) 13%, #fff); }
+
+.buslines .cover {
+    font-size: 12px;
+    color: var(--ink-mid);
+    font-variant-numeric: tabular-nums;
+}
+
 /* ── 响应式（本页特有部分） ── */
 @media (max-width: 760px) {
     .buslines .run,
     .buslines .detail,
-    .buslines .loop-panel {
+    .buslines .loop-panel,
+    .buslines .map-panel,
+    .buslines .area-panel {
         padding-left: 16px;
         padding-right: 16px;
     }
 
     .buslines .stats {
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    .buslines .list-head {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-left: 16px;
+        padding-right: 16px;
     }
 }

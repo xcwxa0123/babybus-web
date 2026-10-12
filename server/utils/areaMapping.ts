@@ -9,120 +9,130 @@
 //   · **只落最细的区县级**（level = 'district'）。查省 / 市时用 city_codes 的父子关系往上推，
 //     实测 3213 个区县的父级链 100% 完整，且与 adcode 前缀零差异。
 //
-// 整体替换而不是增量：几何判断只对「去重后的站点」（约 2.4 万个）做一次，
-// 边界全爬完也只是一两秒的事，比维护增量状态可靠得多。
+// 分批执行：按「区县」切片，每批处理若干个区县，进度就是已处理区县数 —— 是真的，
+// 不是给一个瞬间完成的操作配个假进度条。线路表在最后一批之后用纯 SQL 派生。
 import { bboxContains, bboxOfRings, parseLngLat, parseRings, pointInRings } from './geo'
 
-export type RebuildResult = {
-    areasUsed: number          // 参与判断的区县数（有边界的）
-    stopsScanned: number       // 参与判断的站点数
-    stopAreas: number          // 落进 bus_stop_area 的行数
-    lineAreas: number          // 落进 bus_line_area 的行数
-    linesMapped: number        // 至少落进一个区县的线路数
-    linesUnmapped: number      // 一个区县都没落进去的线路数（所属区域边界还没爬）
-    multiAreaStops: number     // 同时落在多个区县的站点数 —— 正常应为 0，非 0 是边界数据重叠的信号
+export type BatchResult = {
+    total: number              // 有边界的区县总数
+    offset: number             // 本批起点
+    processed: number          // 本批处理了几个区县
+    cleared: boolean           // 本批是否清了表（只有第一批发车时才会）
+    finished: boolean          // 全部处理完，线路表已派生
+    stopAreas: number          // bus_stop_area 当前行数（累计）
+    lineAreas?: number         // finished 时才有
+    linesMapped?: number
+    linesUnmapped?: number
+    multiAreaStops?: number    // 同时落在多个区县的站点数；正常为 0，非 0 说明边界数据有重叠
     ms: number
 }
 
-export function rebuildAreaMapping(): RebuildResult {
+const AREA_SQL = `
+  SELECT adcode, level, polyline FROM city_codes
+  WHERE level = 'district' AND polyline IS NOT NULL AND polyline <> ''
+  ORDER BY adcode
+`
+
+// 线路表派生：线路经过的区县 = 它的站点所属区县的并集。
+// is_start / is_end 用「组内是否存在 seq 等于全表首 / 末 seq 的行」判断 ——
+// 环线的首末站落在同一个区时两列都会是 1，这正是要的（它既是始发也是终到，不是纯途经）。
+const DERIVE_SQL = `
+  INSERT INTO bus_line_area
+    (bus_id, adcode, level, stop_num, first_seq, is_start, is_end, computed_at)
+  SELECT
+    q.bus_id,
+    sa.adcode,
+    MIN(sa.level),
+    COUNT(DISTINCT q.stop_id),
+    MIN(q.seq),
+    MAX(CASE WHEN q.seq = t.first_seq THEN 1 ELSE 0 END),
+    MAX(CASE WHEN q.seq = t.last_seq  THEN 1 ELSE 0 END),
+    datetime('now', 'localtime')
+  FROM bus_stop_sequences q
+  JOIN bus_stop_area sa ON sa.stop_id = q.stop_id
+  JOIN (
+    SELECT bus_id, MIN(seq) AS first_seq, MAX(seq) AS last_seq
+    FROM bus_stop_sequences GROUP BY bus_id
+  ) t ON t.bus_id = q.bus_id
+  GROUP BY q.bus_id, sa.adcode
+`
+
+export function rebuildAreaMappingBatch(offset = 0, limit = 200): BatchResult {
     const started = Date.now()
     const db = getDb()
 
-    // 1. 把所有有边界的区县读进内存。只取 district 一层，
-    //    所以候选集是几千个而不是上万个 —— 省 / 市 / 国不需要判断。
-    const areas = (
-        db
-            .prepare(
-                `SELECT adcode, level, polyline FROM city_codes
-                 WHERE level = 'district' AND polyline IS NOT NULL AND polyline <> ''`
-            )
-            .all() as any[]
-    )
-        .map((a) => {
-            const rings = parseRings(a.polyline)
-            return { adcode: String(a.adcode), level: a.level as string | null, rings, box: bboxOfRings(rings) }
-        })
-        .filter((a) => a.box && a.rings.length)
+    const areaRows = db.prepare(AREA_SQL).all() as any[]
+    const total = areaRows.length
+    const from = Math.max(0, Math.floor(offset) || 0)
+    const to = Math.min(total, from + Math.max(1, Math.floor(limit) || 1))
+    const slice = areaRows.slice(from, to)
 
-    if (!areas.length) {
-        return {
-            areasUsed: 0, stopsScanned: 0, stopAreas: 0, lineAreas: 0,
-            linesMapped: 0, linesUnmapped: 0, multiAreaStops: 0, ms: Date.now() - started,
-        }
-    }
-
-    // 2. 逐个站点定归属。
-    //    顺序很重要：先包围盒（几次数值比较）再射线法（要遍历环的所有顶点），
-    //    绝大多数「站点 × 区县」组合在第一步就被排掉了。
-    const stops = db
+    // 站点坐标只解析一次。放在区县循环外层：不然每个区县都要把两万多个
+    // 「lng,lat」字符串重新 split + Number 一遍，白白多花几十倍时间。
+    const points: { id: string; lng: number; lat: number }[] = []
+    for (const s of db
         .prepare("SELECT id, location FROM bus_stops WHERE location IS NOT NULL AND location <> ''")
-        .all() as any[]
-
-    const stopAreaRows: { stop_id: string; adcode: string; level: string | null }[] = []
-    let multiAreaStops = 0
-    for (const s of stops) {
-        const point = parseLngLat(s.location)
-        if (!point) continue
-        let hits = 0
-        for (const a of areas) {
-            const box = a.box as NonNullable<typeof a.box>
-            if (!bboxContains(box, point[0], point[1])) continue
-            if (!pointInRings(point[0], point[1], a.rings)) continue
-            stopAreaRows.push({ stop_id: String(s.id), adcode: a.adcode, level: a.level })
-            hits++
-        }
-        if (hits > 1) multiAreaStops++
+        .all() as any[]) {
+        const p = parseLngLat(s.location)
+        if (p) points.push({ id: String(s.id), lng: p[0], lat: p[1] })
     }
 
-    // 3. 一个事务里整体替换，中途失败也不会留下半张表
-    const replaceAll = db.transaction(() => {
-        db.prepare('DELETE FROM bus_stop_area').run()
-        db.prepare('DELETE FROM bus_line_area').run()
+    let cleared = false
+    const write = db.transaction(() => {
+        if (from === 0) {
+            // 从第 0 批出发 = 一次全新的完整重建，先清表。
+            // 否则上一轮的行会残留下来，而且分辨不出哪些是过期的。
+            db.prepare('DELETE FROM bus_stop_area').run()
+            db.prepare('DELETE FROM bus_line_area').run()
+            cleared = true
+        }
 
-        const insStopArea = db.prepare(
+        const ins = db.prepare(
             'INSERT OR REPLACE INTO bus_stop_area (stop_id, adcode, level) VALUES (?, ?, ?)'
         )
-        for (const r of stopAreaRows) insStopArea.run(r.stop_id, r.adcode, r.level)
-
-        // 4. 线路表纯 SQL 派生，不再做任何几何判断：
-        //    线路经过的区县 = 它的站点所属区县的并集。
-        //    is_start / is_end 用「组内是否存在 seq 等于全表首 / 末 seq 的行」判断，
-        //    环线的首末站落在同一个区时两列都会是 1 —— 这正是要的（它既是始发也是终到，不是途经）。
-        db.prepare(`
-          INSERT INTO bus_line_area
-            (bus_id, adcode, level, stop_num, first_seq, is_start, is_end, computed_at)
-          SELECT
-            q.bus_id,
-            sa.adcode,
-            MIN(sa.level),
-            COUNT(DISTINCT q.stop_id),
-            MIN(q.seq),
-            MAX(CASE WHEN q.seq = t.first_seq THEN 1 ELSE 0 END),
-            MAX(CASE WHEN q.seq = t.last_seq  THEN 1 ELSE 0 END),
-            datetime('now', 'localtime')
-          FROM bus_stop_sequences q
-          JOIN bus_stop_area sa ON sa.stop_id = q.stop_id
-          JOIN (
-            SELECT bus_id, MIN(seq) AS first_seq, MAX(seq) AS last_seq
-            FROM bus_stop_sequences GROUP BY bus_id
-          ) t ON t.bus_id = q.bus_id
-          GROUP BY q.bus_id, sa.adcode
-        `).run()
+        for (const a of slice) {
+            const rings = parseRings(a.polyline)
+            const box = bboxOfRings(rings)
+            if (!box || !rings.length) continue
+            const adcode = String(a.adcode)
+            for (const pt of points) {
+                // 先包围盒（几次数值比较）再射线法（要遍历环的全部顶点）
+                if (!bboxContains(box, pt.lng, pt.lat)) continue
+                if (!pointInRings(pt.lng, pt.lat, rings)) continue
+                ins.run(pt.id, adcode, a.level ?? null)
+            }
+        }
     })
-    replaceAll()
+    write()
 
-    const lineAreas = (db.prepare('SELECT COUNT(*) AS n FROM bus_line_area').get() as any).n
-    const linesMapped = (db.prepare('SELECT COUNT(DISTINCT bus_id) AS n FROM bus_line_area').get() as any).n
-    const linesTotal = (db.prepare('SELECT COUNT(*) AS n FROM bus_lines').get() as any).n
-
-    return {
-        areasUsed: areas.length,
-        stopsScanned: stops.length,
-        stopAreas: stopAreaRows.length,
-        lineAreas,
-        linesMapped,
-        linesUnmapped: linesTotal - linesMapped,
-        multiAreaStops,
-        ms: Date.now() - started,
+    const stopAreas = (db.prepare('SELECT COUNT(*) AS n FROM bus_stop_area').get() as any).n
+    const result: BatchResult = {
+        total, offset: from, processed: slice.length, cleared,
+        finished: false, stopAreas, ms: 0,
     }
+
+    if (to >= total) {
+        const derive = db.transaction(() => {
+            db.prepare('DELETE FROM bus_line_area').run()
+            db.prepare(DERIVE_SQL).run()
+        })
+        derive()
+
+        const one = (sql: string) => (db.prepare(sql).get() as any).n
+        result.lineAreas = one('SELECT COUNT(*) AS n FROM bus_line_area')
+        result.linesMapped = one('SELECT COUNT(DISTINCT bus_id) AS n FROM bus_line_area')
+        result.linesUnmapped = one('SELECT COUNT(*) AS n FROM bus_lines') - result.linesMapped
+        result.multiAreaStops = one(
+            'SELECT COUNT(*) AS n FROM (SELECT stop_id FROM bus_stop_area GROUP BY stop_id HAVING COUNT(*) > 1)'
+        )
+        result.finished = true
+    }
+
+    result.ms = Date.now() - started
+    return result
+}
+
+// 一次跑完（脚本、测试、以及不带参数直接 POST 时用）
+export function rebuildAreaMapping(): BatchResult {
+    return rebuildAreaMappingBatch(0, Number.MAX_SAFE_INTEGER)
 }
