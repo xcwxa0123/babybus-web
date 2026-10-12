@@ -269,11 +269,14 @@
     min-width: 100cqw;
 }
 
-/* ── 分页 ── */
-.districts .pager {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 16px;
+/* ── 树形表的展开箭头 ── */
+.districts .table-panel .el-table .el-table__expand-icon {
+    color: var(--ink-light);
+    transition: color 0.2s ease;
+}
+
+.districts .table-panel .el-table .el-table__expand-icon:hover {
+    color: var(--sky-accent);
 }
 
 /* ── 编辑弹窗 ── */
@@ -385,8 +388,4 @@
         padding-right: 16px;
     }
 
-    .districts .pager {
-        justify-content: center;
-        overflow-x: auto;
-    }
 }

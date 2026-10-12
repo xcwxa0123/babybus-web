@@ -81,7 +81,7 @@
 				</div>
 			</div>
 
-			<div class="module-card" @click="go('/citycodes')">
+			<div class="module-card" @click="go('/districts')">
 				<div class="module-icon-wrap">
 					<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
 						stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -90,8 +90,8 @@
 						<path d="M3 12A9 3 0 0 0 21 12" />
 					</svg>
 				</div>
-				<div class="module-name">城市编码本地库</div>
-				<div class="module-desc">维护 adcode 与 citycode 对照表，为拉取任务提供城市定位与区域归属。</div>
+				<div class="module-name">行政区边界管理</div>
+				<div class="module-desc">维护行政区层级与边界：adcode、父级归属、边界坐标，支持逐级展开与粘贴导入。</div>
 				<div class="module-footer">
 					<span class="module-tag tag-warm">基础</span>
 					<svg class="module-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none"

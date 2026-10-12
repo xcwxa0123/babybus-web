@@ -21,6 +21,33 @@ export function normalizeCitycode(raw: any): string | null {
     return s ? s : null
 }
 
+// 行政区列表 / 子级查询共用的列集合：
+// 两个接口字段必须完全一致（前端同一套列渲染），抽出来避免以后加字段时只改了一边。
+// where / orderBy 只允许传固定片段（不要拼接用户输入，参数一律走 ? 绑定）。
+export function districtSelectSql(
+    where = '',
+    orderBy = 'ORDER BY c.adcode IS NULL, c.adcode'
+): string {
+    return `
+      SELECT
+        c.id,
+        c.name,
+        c.adcode,
+        c.citycode,
+        c.parent_adcode AS parentAdcode,
+        c.level,
+        (SELECT p.name FROM city_codes p WHERE p.adcode = c.parent_adcode LIMIT 1) AS parentName,
+        CASE WHEN c.polyline IS NULL OR c.polyline = '' THEN 0
+             ELSE LENGTH(c.polyline) - LENGTH(REPLACE(c.polyline, ',', ''))
+        END AS polyPoints,
+        CASE WHEN EXISTS (SELECT 1 FROM city_codes k WHERE k.parent_adcode = c.adcode)
+             THEN 1 ELSE 0 END AS hasChildren
+      FROM city_codes c
+      ${where}
+      ${orderBy}
+    `
+}
+
 // 边界坐标串规范化：
 // - 高德返回的边界可能是「环内 ; 分隔、环间 | 分隔」的多面结构，这里保持这个语义不变
 // - 点与点之间允许 ; | 换行 制表符 空格 等任意混合分隔，统一成 ;

@@ -6,7 +6,9 @@
 				<h2 class="page-title"><span class="logo-dot" />行政区边界管理</h2>
 				<span class="logo-en">Administrative districts</span>
 			</div>
-			<p class="page-meta">共 {{ total }} 个区域，已录边界 {{ withBoundary }} 个</p>
+			<p class="page-meta">
+				共 {{ total }} 个区域，已录边界 {{ withBoundary }} 个<template v-if="hasQuery">，当前命中 {{ matched }} 项</template>
+			</p>
 		</div>
 
 		<!-- 操作区：筛选 -->
@@ -55,7 +57,13 @@
 
 		<!-- 区域列表 -->
 		<section class="panel table-panel">
-			<el-table v-loading="loading" :data="list">
+			<!-- lazy + :load：树是按需长的——点开某一行才去查它下一层，
+			     所以接口只给当层数据，不用一次性把整棵树端回来。
+			     row-key 必须有（懒加载靠它记展开状态）；hasChildren 决定要不要画展开箭头。
+			     max-height：给个自适应高度让表格内部滚动、表头吸顶。 -->
+			<el-table v-loading="loading" :data="list" row-key="id" lazy :load="loadChildren"
+				:tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
+				max-height="clamp(420px, calc(100vh - 360px), 860px)">
 				<template #empty>
 					<div class="empty">
 						<div class="empty-icon"></div>
@@ -65,12 +73,13 @@
 				</template>
 				<el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip>
 					<template #default="{ row }">
-						<span class="area-name" :style="{ paddingLeft: indentOf(row) }">{{ row.name }}</span>
+						<span class="area-name">{{ row.name }}</span>
 					</template>
 				</el-table-column>
-				<el-table-column prop="adcode" label="adcode" width="110" class="col-center"
+				<el-table-column prop="adcode" label="adcode" width="110" class-name="col-center"
 					label-class-name="col-center" />
-				<el-table-column label="层级" width="90" class="col-center" label-class-name="col-center">
+				<el-table-column label="层级" width="90" class-name="col-center"
+					label-class-name="col-center">
 					<template #default="{ row }">
 						<span class="lv" :class="`lv-${row.level || 'unknown'}`">{{ levelText(row.level) }}</span>
 					</template>
@@ -84,16 +93,19 @@
 						<span v-else class="dash">—</span>
 					</template>
 				</el-table-column>
-				<el-table-column label="边界" width="110" class="col-num" label-class-name="col-num">
+				<el-table-column label="边界" width="110" class-name="col-num"
+					label-class-name="col-num">
 					<template #default="{ row }">
 						<span v-if="row.polyPoints > 0" class="pts">{{ row.polyPoints }} 点</span>
 						<span v-else class="none">未录入</span>
 					</template>
 				</el-table-column>
-				<el-table-column label="citycode" width="100" class="col-center" label-class-name="col-center">
+				<el-table-column label="citycode" width="100" class-name="col-center"
+					label-class-name="col-center">
 					<template #default="{ row }">{{ row.citycode || '-' }}</template>
 				</el-table-column>
-				<el-table-column label="操作" width="110" class="col-center" label-class-name="col-center">
+				<el-table-column label="操作" width="110" class-name="col-center"
+					label-class-name="col-center">
 					<template #default="{ row }">
 						<el-button size="small" @click="openEdit(row)">编辑</el-button>
 					</template>
@@ -101,15 +113,7 @@
 			</el-table>
 		</section>
 
-		<!-- 分页 -->
-		<div class="pager">
-			<ClientOnly>
-				<el-pagination background layout="total, sizes, prev, pager, next, jumper" :total="total"
-					:page-size="pageSize" :current-page="page" :page-sizes="[20, 50, 100, 200]"
-					@size-change="(s: number) => { pageSize = s; page = 1; loadList() }"
-					@current-change="onPageChange" />
-			</ClientOnly>
-		</div>
+		<!-- 列表改成了父子树形态，不再分页（树一旦分页，语义就乱了） -->
 
 		<!-- 编辑弹窗 -->
 		<el-dialog v-model="editDialog" class="app-dialog" title="编辑行政区" width="720px">
@@ -193,27 +197,25 @@ const LEVEL_TEXT: Record<string, string> = {
 	street: '街道级'
 }
 
-const LEVEL_DEPTH: Record<string, number> = { province: 0, city: 1, district: 2, street: 3 }
-
 const list = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const importing = ref(false)
 
-const page = ref(1)
-const pageSize = ref(20)
 const total = ref(0)
 const withBoundary = ref(0)
+const matched = ref(0)
+// 本次结果是不是「没填任何筛选条件」拿到的（服务端会默认落到中国那个根节点）
+const defaulted = ref(true)
 
 const filters = ref({ name: '', adcode: '', level: '', parentAdcode: '' })
 
+const hasQuery = computed(
+	() => !!(filters.value.name || filters.value.adcode || filters.value.level || filters.value.parentAdcode)
+)
+
 function levelText(level: any): string {
 	return LEVEL_TEXT[String(level ?? '')] ?? '—'
-}
-
-// 列表里用缩进把这个区域的层级体现出来，省得再上一套树形控件
-function indentOf(row: any): string {
-	return `${(LEVEL_DEPTH[String(row?.level ?? '')] ?? 0) * 14}px`
 }
 
 // 每个点恰好一个逗号，所以数逗号比数分号准（多环时数分号会少算）
@@ -230,32 +232,39 @@ async function loadList() {
 				name: filters.value.name || undefined,
 				adcode: filters.value.adcode || undefined,
 				level: filters.value.level || undefined,
-				parentAdcode: filters.value.parentAdcode || undefined,
-				page: page.value,
-				pageSize: pageSize.value
+				parentAdcode: filters.value.parentAdcode || undefined
 			}
 		})
-		list.value = res.data ?? []
+		// 接口统一返回已经组好的父子树，前端直接渲染
+		list.value = Array.isArray(res.data) ? res.data : []
 		total.value = res.total ?? 0
 		withBoundary.value = res.withBoundary ?? 0
+		matched.value = res.matched ?? list.value.length
+		defaulted.value = res.defaulted ?? false
 	} finally {
 		loading.value = false
 	}
 }
 
-function onPageChange(p: number) {
-	page.value = p
-	loadList()
+// 懒加载：点开某一行才去拉它下面的直接子级。
+// EP 会把 resolve 的结果缓存在自己那棵树里，收起再展开不会重复请求
+async function loadChildren(row: any, _treeNode: any, resolve: (rows: any[]) => void) {
+	if (!row?.adcode) {
+		resolve([])
+		return
+	}
+	const res = await request('/api/citycodes/districts/children', {
+		query: { adcode: row.adcode }
+	})
+	resolve(Array.isArray(res.data) ? res.data : [])
 }
 
 function onSearch() {
-	page.value = 1
 	loadList()
 }
 
 function resetSearch() {
 	filters.value = { name: '', adcode: '', level: '', parentAdcode: '' }
-	page.value = 1
 	loadList()
 }
 
@@ -417,7 +426,6 @@ async function submitImport() {
 			const { inserted, updated, skipped } = res.data
 			ElMessage.success(`导入完成：新增 ${inserted}，更新 ${updated}，跳过 ${skipped}`)
 			importDialog.value = false
-			page.value = 1
 			loadList()
 		} else {
 			ElMessage.error(`导入失败：${res?.msg ?? '未知错误'}`)
