@@ -12,28 +12,22 @@
 			</p>
 		</div>
 
-		<!-- 数据任务：低频、会消耗配额的重操作，收在同一个面板里。
-		     这里故意不用 el-tabs：它的 tab 头要等子级 el-tab-pane 注册完才渲染，
-		     而 SSR 是一次性渲染、没有「注册完再重渲」这一步 —— 实测服务端吐出来的 HTML 里
-		     只有 .el-tabs__content、没有 .el-tabs__header，客户端 hydration 就对不上
-		     （dev 模式会把整块重渲修回来，生产构建会直接丢掉不匹配的节点，表现就是工具栏凭空消失）。
-		     两个面板本来就是独立组件，自己画一行标签切换就行，不必承担这个风险。
-		     注意用 v-show 而不是 v-if：切标签时不能卸载组件，否则正在跑的循环拉取会被打断。 -->
+		<!-- 数据任务：低频、会消耗配额的重操作，收在同一个面板里 -->
 		<section class="panel task-panel" :class="{ running: pullRunning || mapRunning }">
-			<div class="task-tabs" role="tablist">
-				<button type="button" role="tab" class="task-tab" :class="{ active: taskTab === 'pull' }"
-					:aria-selected="taskTab === 'pull'" @click="taskTab = 'pull'">
-					拉取入库<i v-if="pullRunning" class="run-dot" />
-				</button>
-				<button type="button" role="tab" class="task-tab" :class="{ active: taskTab === 'map' }"
-					:aria-selected="taskTab === 'map'" @click="taskTab = 'map'">
-					区域映射<i v-if="mapRunning" class="run-dot" />
-				</button>
-			</div>
-
-			<TaskPull v-show="taskTab === 'pull'" ref="pullRef" v-model:city="city"
-				@running="pullRunning = $event" @changed="loadList" />
-			<TaskMapping v-show="taskTab === 'map'" @running="mapRunning = $event" @changed="loadList" />
+			<el-tabs v-model="taskTab" class="task-tabs">
+				<el-tab-pane name="pull">
+					<template #label>
+						<span class="task-tab">拉取入库<i v-if="pullRunning" class="run-dot" /></span>
+					</template>
+					<TaskPull ref="pullRef" v-model:city="city" @running="pullRunning = $event" @changed="loadList" />
+				</el-tab-pane>
+				<el-tab-pane name="map">
+					<template #label>
+						<span class="task-tab">区域映射<i v-if="mapRunning" class="run-dot" /></span>
+					</template>
+					<TaskMapping @running="mapRunning = $event" @changed="loadList" />
+				</el-tab-pane>
+			</el-tabs>
 		</section>
 
 		<!-- 浏览区：左边选行政区，右边看线路 -->

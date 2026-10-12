@@ -25,39 +25,26 @@
     box-shadow: inset 3px 0 0 var(--bl-ochre), var(--shadow-sm);
 }
 
-/* 标签栏是自绘的（原因见 buslines.vue 里那段注释：el-tabs 的 tab 头在 SSR 下渲染不出来） */
-.buslines .task-tabs {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
+.buslines .task-tabs .el-tabs__header {
+    margin: 0;
+}
+
+.buslines .task-tabs .el-tabs__nav-wrap::after {
+    height: 1px;
+    background-color: rgba(180, 160, 120, 0.14);
+}
+
+.buslines .task-tabs .el-tabs__item {
+    height: 46px;
+    line-height: 46px;
+    font-size: 14px;
+    font-weight: 500;
 }
 
 .buslines .task-tab {
-    appearance: none;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 46px;
-    padding: 0 16px;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: none;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--ink-mid);
-    cursor: pointer;
-    transition: color 0.2s ease, border-color 0.2s ease;
-}
-
-.buslines .task-tab:hover {
-    color: var(--ink);
-}
-
-.buslines .task-tab.active {
-    color: var(--ink);
-    border-bottom-color: var(--sky-accent);
 }
 
 /* 标签页上的「任务运行中」小圆点 */
