@@ -357,6 +357,51 @@
     color: var(--ink-light);
 }
 
+/* 分批方案说明：解析后立刻告诉用户要跑几批 */
+.districts .ip-plan {
+    margin-top: 6px;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 导入进度：几十次分批往返，得让用户看到「跑到哪了、还剩多少」 */
+.districts .import-progress {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--cream);
+    border-radius: 10px;
+}
+
+.districts .ip-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--ink-mid);
+}
+
+.districts .ip-count {
+    color: var(--ink-light);
+    font-variant-numeric: tabular-nums;
+}
+
+.districts .ip-stats {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--ink-light);
+    font-variant-numeric: tabular-nums;
+}
+
+.districts .ip-hint {
+    color: var(--ink-faint);
+}
+
 /* 边界缺失的提醒：琥珀色小块，避免把「解析成功」误当成「边界也拿到了」 */
 .districts .import-warn {
     margin-top: 8px;

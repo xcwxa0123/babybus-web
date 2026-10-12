@@ -170,12 +170,20 @@
 		</el-dialog>
 
 		<!-- 批量导入弹窗 -->
-		<el-dialog v-model="importDialog" class="app-dialog" title="批量导入行政区" width="760px">
+		<el-dialog v-model="importDialog" class="app-dialog" title="批量导入行政区" width="760px"
+			:close-on-click-modal="!importing" :close-on-press-escape="!importing">
 			<el-input v-model="importRaw" type="textarea" :rows="10"
 				placeholder="把高德行政区接口返回的 JSON 整段粘进来即可，会自动递归解析 districts 层级" />
 			<div class="import-tip">
 				<template v-if="parsedItems.length">
 					已解析 {{ parsedItems.length }} 条，其中带边界 {{ parsedWithBoundary }} 条
+					<div class="ip-plan">
+						将分 {{ batchPlan.batches.length }} 批提交（单批不超过 {{ batchBytesKb }}KB，避开网关的请求体上限）
+					</div>
+					<div v-if="batchPlan.oversized.length" class="import-warn">
+						有 {{ batchPlan.oversized.length }} 条单条就超过 {{ batchBytesKb }}KB：{{ oversizedPreview }}。
+						它们会各自单独成批，但仍可能被网关拒绝——这种超长边界建议改用按 adcode 逐个拉取的方式录入。
+					</div>
 					<div v-if="parsedWithBoundary < parsedItems.length" class="import-warn">
 						高德的行政区接口默认只下发「被查询那一级」的边界，子级节点的 polyline 基本是空的
 						（实测查一个省：1 省 + 16 市 + 136 区县，只有省本身带边界）。
@@ -194,12 +202,32 @@
 				</div>
 				<div v-if="parsedItems.length > 5" class="preview-more">…仅预览前 5 条</div>
 			</div>
+
+			<!-- 分批提交是几十次往返，没有进度会让人以为卡死了 -->
+			<div v-if="importing || importProgress.total" class="import-progress">
+				<div class="ip-head">
+					<span>{{ importState.text }}</span>
+					<span class="ip-count">{{ importProgress.done }} / {{ importProgress.total }} 批</span>
+				</div>
+				<el-progress :percentage="importPercent" :stroke-width="8" :status="importState.status" />
+				<div class="ip-stats">
+					<span>新增 {{ importProgress.inserted }}</span>
+					<span>更新 {{ importProgress.updated }}</span>
+					<span>跳过 {{ importProgress.skipped }}</span>
+					<span v-if="importing" class="ip-hint">正在分批提交，跑完前别关页面</span>
+				</div>
+			</div>
+
+			<div v-if="importError" class="import-warn">
+				<div v-for="(line, i) in importError.split('\n')" :key="i">{{ line }}</div>
+			</div>
+
 			<template #footer>
-				<el-button @click="importDialog = false">取消</el-button>
-				<el-button @click="doParse">解析预览</el-button>
+				<el-button :disabled="importing" @click="importDialog = false">取消</el-button>
+				<el-button :disabled="importing" @click="doParse">解析预览</el-button>
 				<el-button type="primary" :disabled="!parsedItems.length" :loading="importing"
 					@click="submitImport">
-					确认导入
+					{{ importError ? '重试导入' : '确认导入' }}
 				</el-button>
 			</template>
 		</el-dialog>
@@ -381,19 +409,91 @@ async function submitEdit() {
 }
 
 // ---- 批量导入 ----
+// 单批请求体的字节上限。nginx 的 client_max_body_size 默认是 1m，
+// 整份全国数据一次 POST 必然被网关挡在门外（413），所以按体积切成多批提交。
+// 取 512KB 是给默认上限留一半余量——请求体之外还有请求头，别卡着线走。
+const BATCH_BYTES = 512 * 1024
+const batchBytesKb = Math.round(BATCH_BYTES / 1024)
+
 const importDialog = ref(false)
 const importRaw = ref('')
 const parsedItems = ref<any[]>([])
 const parseError = ref('')
+const importError = ref('')
+
+// 解析后就算好分批方案：提交前就能告诉用户要跑几批、有没有单条就超限的刺头
+const batchPlan = ref<{ batches: any[][]; oversized: any[] }>({ batches: [], oversized: [] })
+
+const importProgress = ref({ done: 0, total: 0, inserted: 0, updated: 0, skipped: 0 })
+const importPercent = computed(() => {
+	const { done, total } = importProgress.value
+	return total ? Math.min(100, Math.round((done / total) * 100)) : 0
+})
+
+// 进度面板的收尾状态：中断了不能还挂个绿勾
+const importState = computed(() => {
+	if (importing.value) return { text: '导入中', status: '' as const }
+	if (importError.value) return { text: '已中断', status: 'exception' as const }
+	return { text: '已结束', status: 'success' as const }
+})
+
+const oversizedPreview = computed(() => {
+	const list = batchPlan.value.oversized
+	const head = list.slice(0, 3).map((it: any) => `${it.adcode} ${it.name}`).join('、')
+	return list.length > 3 ? `${head} 等` : head
+})
 
 const parsedWithBoundary = computed(
 	() => parsedItems.value.filter((it) => pointCount(it.polyline) > 0).length
 )
 
+// request() 把异常兜成了 { code: 401, msg: error }，而 msg 往往是个 FetchError 对象，
+// 直接插值会渲染成 [object Object]，这里统一提成能读的一行
+function errText(e: any): string {
+	if (!e) return '未知错误'
+	if (typeof e === 'string') return e
+	return e?.message || e?.statusMessage || e?.data?.msg || '未知错误'
+}
+
+// 按「序列化后的实际字节数」贪心切批，而不是按条数——
+// 边界字符串的体积能差四五个数量级（一个省边界几十万字符，一个区县名几十字节），
+// 按条数切会在碰上大边界时整批超限；按体积切则大边界自己单独成批。
+// 单条就超过上限的会进 oversized 名单：仍然单独成批尽力一试（调用方的网关未必是默认值），
+// 但提前告诉用户，免得跑了几十批才在它身上翻车。
+function packBatches(items: any[]): { batches: any[][]; oversized: any[] } {
+	const enc = new TextEncoder()
+	const batches: any[][] = []
+	const oversized: any[] = []
+	let cur: any[] = []
+	let curSize = 2 // 数组外壳的一对中括号
+
+	for (const it of items) {
+		let size: number
+		try {
+			size = enc.encode(JSON.stringify(it) ?? '').length + 1 // +1 是分隔逗号
+		} catch {
+			size = 0
+		}
+		if (size > BATCH_BYTES - 2) oversized.push(it)
+		if (cur.length && curSize + size > BATCH_BYTES) {
+			batches.push(cur)
+			cur = []
+			curSize = 2
+		}
+		cur.push(it)
+		curSize += size
+	}
+	if (cur.length) batches.push(cur)
+	return { batches, oversized }
+}
+
 function openImport() {
 	importRaw.value = ''
 	parsedItems.value = []
 	parseError.value = ''
+	importError.value = ''
+	batchPlan.value = { batches: [], oversized: [] }
+	importProgress.value = { done: 0, total: 0, inserted: 0, updated: 0, skipped: 0 }
 	importDialog.value = true
 }
 
@@ -454,23 +554,63 @@ function doParse() {
 		return
 	}
 	parsedItems.value = items
+	// 解析时顺手把分批方案算好（要全量序列化一遍，放这儿只做一次）
+	batchPlan.value = packBatches(items)
+	importError.value = ''
+	importProgress.value = { done: 0, total: 0, inserted: 0, updated: 0, skipped: 0 }
 }
 
 async function submitImport() {
+	// 解析时已算过，这里直接用；万一没有（理论上不会，按钮没解析不让点）就现算一份
+	const batches = batchPlan.value.batches.length
+		? batchPlan.value.batches
+		: packBatches(parsedItems.value).batches
+	if (!batches.length) {
+		ElMessage.error('没有可导入的数据')
+		return
+	}
+
 	importing.value = true
+	importError.value = ''
+	importProgress.value = { done: 0, total: batches.length, inserted: 0, updated: 0, skipped: 0 }
+
 	try {
-		const res = await request('/api/citycodes/districts/import', {
-			method: 'POST',
-			body: { items: parsedItems.value }
-		})
-		if (res?.code === 200) {
-			const { inserted, updated, skipped } = res.data
-			ElMessage.success(`导入完成：新增 ${inserted}，更新 ${updated}，跳过 ${skipped}`)
-			importDialog.value = false
-			loadList()
-		} else {
-			ElMessage.error(`导入失败：${res?.msg ?? '未知错误'}`)
+		// 一批一批串行发：不再有单个超大请求体；串行也让进度和配额都可控
+		for (let i = 0; i < batches.length; i++) {
+			const batch = batches[i]
+			if (!batch?.length) continue
+
+			const res = await request('/api/citycodes/districts/import', {
+				method: 'POST',
+				body: { items: batch }
+			})
+
+			if (res?.code !== 200) {
+				// 失败就停在当前批，不继续往下跑（多半是体积之外的系统性问题，继续也是白跑）。
+				// 已完成的批次是真落库的，而导入接口按 adcode upsert —— 重跑一遍即可补齐，不会重复入库。
+				const { done, inserted, updated, skipped } = importProgress.value
+				importError.value =
+					`第 ${i + 1}/${batches.length} 批失败（本批 ${batch.length} 条）：${errText(res?.msg)}\n`
+					+ `已完成 ${done} 批，累计新增 ${inserted} · 更新 ${updated} · 跳过 ${skipped}。\n`
+					+ '导入按 adcode 覆盖，修掉问题后直接点「重试导入」再跑一遍即可，不会重复入库。'
+				ElMessage.error(`导入中断：第 ${i + 1}/${batches.length} 批失败`)
+				return
+			}
+
+			const { inserted = 0, updated = 0, skipped = 0 } = res.data ?? {}
+			importProgress.value = {
+				done: i + 1,
+				total: batches.length,
+				inserted: importProgress.value.inserted + inserted,
+				updated: importProgress.value.updated + updated,
+				skipped: importProgress.value.skipped + skipped
+			}
 		}
+
+		const { inserted, updated, skipped } = importProgress.value
+		ElMessage.success(`导入完成：新增 ${inserted}，更新 ${updated}，跳过 ${skipped}`)
+		importDialog.value = false
+		loadList()
 	} finally {
 		importing.value = false
 	}
