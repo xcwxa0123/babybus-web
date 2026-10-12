@@ -55,6 +55,63 @@
 			</div>
 		</section>
 
+		<!-- 补边界：重操作，独立次级面板（逐条查高德、持续消耗配额，可随时停止） -->
+		<section class="panel crawl-panel" :class="{ running: crawlRunning }">
+			<div class="crawl-lead">
+				<div class="crawl-title">补齐行政区边界</div>
+				<div class="crawl-sub">
+					按 adcode 逐条向高德查询边界并入库。默认只处理「还没有边界」的行政区，
+					所以跑一半断了再来点一次会自动接着跑，不会重复消耗配额。
+				</div>
+			</div>
+			<div class="crawl-body">
+				<span class="crawl-label">范围</span>
+				<!-- 同筛选区的 el-select：EP 内部挂 Tooltip，SSR 收尾会碰 window，必须包 ClientOnly -->
+				<ClientOnly>
+					<el-select v-model="crawlScope" class="w-sm" :disabled="crawlRunning">
+						<el-option value="missing" label="只补未录入" />
+						<el-option value="all" label="全部重爬" />
+					</el-select>
+					<template #fallback>
+						<el-input class="w-sm" placeholder="范围" disabled />
+					</template>
+				</ClientOnly>
+				<span class="crawl-label">间隔</span>
+				<el-input v-model="crawlInterval" class="w-xs" :disabled="crawlRunning" placeholder="毫秒" />
+				<el-button type="warning" :disabled="crawlRunning" @click="startCrawl">开始爬取</el-button>
+				<el-button v-if="crawlRunning" type="danger" plain @click="crawlRunning = false">停止</el-button>
+			</div>
+		</section>
+
+		<!-- 补边界进度 -->
+		<section v-if="crawlRunning || crawlStats.total > 0" class="panel crawl-run">
+			<div class="crawl-head">
+				<div>
+					<div class="crawl-title">补边界进度</div>
+					<div class="crawl-sub">
+						{{ crawlRunning ? `正在处理 ${crawlCurrent || '…'}` : '已结束' }}
+						· 队列 {{ crawlQueue.length }} 条 · 每条间隔 {{ crawlInterval || 0 }}ms
+						· 累计 {{ crawlStats.points }} 个坐标点
+					</div>
+				</div>
+				<el-tag :type="crawlRunning ? 'warning' : 'success'" effect="light" round>
+					{{ crawlDone }} / {{ crawlTotal }}
+				</el-tag>
+			</div>
+			<el-progress :percentage="crawlPercent" :stroke-width="8" :status="crawlRunning ? '' : 'success'" />
+			<div class="stats">
+				<div class="stat"><b>{{ crawlStats.total }}</b><span>已处理</span></div>
+				<div class="stat ok"><b>{{ crawlStats.saved }}</b><span>已录入</span></div>
+				<div class="stat warn"><b>{{ crawlStats.empty }}</b><span>高德无边界</span></div>
+				<div class="stat bad"><b>{{ crawlStats.failed }}</b><span>失败</span></div>
+			</div>
+			<div class="log">
+				<el-scrollbar max-height="220px">
+					<div v-for="(line, i) in crawlLog" :key="i" class="log-line">{{ line }}</div>
+				</el-scrollbar>
+			</div>
+		</section>
+
 		<!-- 区域列表 -->
 		<section class="panel table-panel">
 			<!-- lazy + :load：树是按需长的——点开某一行才去查它下一层，
@@ -62,7 +119,7 @@
 			     row-key 必须有（懒加载靠它记展开状态）；hasChildren 决定要不要画展开箭头。
 			     row-click：整行都能点开（箭头自己的 click 是 stopPropagation 的，不会重复触发）。
 			     max-height：给个自适应高度让表格内部滚动、表头吸顶。 -->
-			<el-table ref="tableRef" v-loading="loading" :data="list" row-key="id" lazy
+			<el-table :key="treeKey" ref="tableRef" v-loading="loading" :data="list" row-key="id" lazy
 				:load="loadChildren" :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
 				:row-class-name="rowClassName" @row-click="onRowClick"
 				max-height="clamp(420px, calc(100vh - 360px), 860px)">
@@ -300,6 +357,9 @@ async function loadList() {
 }
 
 const tableRef = ref<any>(null)
+// 变一下就让 el-table 整体重挂：懒加载掉的子节点缓存在 EP 内部，
+// 这是把它们全部丢掉、强制下次展开重新取数的唯一干净办法（见补边界任务的收尾）
+const treeKey = ref(0)
 
 // 点整行就能展开 / 收起。
 // EP 的展开箭头在自己的 click 里做了 stopPropagation，所以这里不会和它重复触发；
@@ -340,10 +400,13 @@ function resetSearch() {
 // ---- 编辑 ----
 const editDialog = ref(false)
 const editForm = ref<any>({})
+// 打开弹窗时记下被编辑的那一行对象本身，保存成功后要往它身上回写
+const editingRow = ref<any>(null)
 
 const editFormPoints = computed(() => pointCount(editForm.value.polyline))
 
 async function openEdit(row: any) {
+	editingRow.value = row
 	editForm.value = {
 		id: row.id,
 		name: row.name,
@@ -397,7 +460,26 @@ async function submitEdit() {
 			}
 		})
 		if (res?.code === 200) {
+			// 行内回写。列表是懒加载树：loadList() 只重拉「根层」，
+			// 已展开的子树按 row-key 缓存在 EP 内部，行的还是保存前那个对象——
+			// 不回写的话，刚录进去的边界这一行仍然显示「未录入」。
+			// polyPoints 用与弹窗「当前 N 个点」同一个 pointCount 计数，
+			// 保证提示和列表口径一致（服务端会丢掉非法点，那种脏输入下会略有出入，
+			// 重新展开一次就是服务端的权威值）。
+			const row = editingRow.value
+			const parentChanged = row
+				&& (editForm.value.parentAdcode || null) !== (row.parentAdcode ?? null)
+			if (row) {
+				row.level = editForm.value.level || null
+				row.parentAdcode = editForm.value.parentAdcode || null
+				row.polyPoints = pointCount(editForm.value.polyline)
+				// 上级换了，父级名称是服务端 join 出来的、前端算不出来——
+				// 置空让它显示「未知区域」，总好过「旧父名 + 新父码」这种自相矛盾的一行
+				if (parentChanged) row.parentName = ''
+			}
 			ElMessage.success('已保存')
+			// 换了上级等于换了归属，这一行本该从当前列表里挪走，得重新展开才是准的
+			if (parentChanged) ElMessage.info('上级已改，重新展开该层可看到新归属')
 			editDialog.value = false
 			loadList()
 		} else {
@@ -614,6 +696,113 @@ async function submitImport() {
 	} finally {
 		importing.value = false
 	}
+}
+
+// ---- 补齐边界：逐条问高德 ----
+// 沿用「循环拉取线路」那套：前端驱动、每条之间节流、可随时停。
+// 好处是进度与日志天然实时，后端不用起任务队列；代价是页面得开着别关。
+const CRAWL_DEFAULT_INTERVAL = 2000
+
+const crawlRunning = ref(false)
+const crawlScope = ref('missing')   // missing=只补未录入 / all=全部重爬
+const crawlInterval = ref(String(CRAWL_DEFAULT_INTERVAL))
+const crawlQueue = ref<any[]>([])
+const crawlCurrent = ref('')
+const crawlTotal = ref(0)
+const crawlDone = ref(0)
+const crawlStats = ref({ total: 0, saved: 0, empty: 0, failed: 0, points: 0 })
+const crawlLog = ref<string[]>([])
+
+const crawlPercent = computed(() =>
+	crawlTotal.value ? Math.min(100, Math.round((crawlDone.value / crawlTotal.value) * 100)) : 0
+)
+
+function crawlPush(msg: string) {
+	const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+	crawlLog.value.push(`[${time}] ${msg}`)
+	if (crawlLog.value.length > 300) crawlLog.value.shift()
+}
+
+function sleep(ms: number) {
+	return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+async function startCrawl() {
+	if (crawlRunning.value) return
+
+	// 队列每次开始前现取。「只查没有边界的行」这个条件本身就是断点续跑：
+	// 跑一半断了、关了页面、被掐了配额，再点一次都自动跳过已补好的。
+	const res = await request('/api/citycodes/districts/polylineTargets', {
+		query: { includeFilled: crawlScope.value === 'all' ? 1 : undefined }
+	})
+	const queue = Array.isArray(res?.data) ? res.data : []
+	if (res?.code !== 200 || !queue.length) {
+		ElMessage.info('没有待补边界的行政区')
+		return
+	}
+
+	crawlQueue.value = queue
+	crawlTotal.value = queue.length
+	crawlDone.value = 0
+	crawlCurrent.value = ''
+	crawlStats.value = { total: 0, saved: 0, empty: 0, failed: 0, points: 0 }
+	crawlLog.value = []
+	crawlRunning.value = true
+	crawlPush(`共 ${queue.length} 条待处理，逐条请求高德`)
+
+	const interval = Math.max(0, Number(crawlInterval.value) || 0)
+	// 谁决定停下来谁写原因，循环头只补「用户按的停止」这一种默认值，
+	// 否则配额耗尽那种内部停止会被后面这一跳覆盖成「手动停止」
+	let stopReason = ''
+
+	for (let i = 0; i < queue.length; i++) {
+		if (!crawlRunning.value) {
+			if (!stopReason) stopReason = '手动停止'
+			break
+		}
+		const it = queue[i]
+		crawlCurrent.value = `${it.adcode} ${it.name}`
+		crawlStats.value.total++
+
+		const r: any = await request('/api/citycodes/districts/fetchPolyline', {
+			method: 'POST',
+			body: { adcode: it.adcode }
+		})
+
+		if (r?.code === 200) {
+			crawlStats.value.saved++
+			crawlStats.value.points += r.data?.points ?? 0
+			crawlPush(`✓ ${it.adcode} ${it.name}：${r.data?.points ?? 0} 点`)
+		} else if (r?.code === 204) {
+			// 高德只对省 / 市 / 区下发边界，街道级大多是空的，属于正常结果而不是错误
+			crawlStats.value.empty++
+			crawlPush(`· ${it.adcode} ${it.name}：高德未返回边界`)
+		} else if (r?.code === 429 && r.data?.quota) {
+			// 配额类错误：继续跑只会把剩下的几百个请求也白打光，直接停。
+			// 置 false 靠循环头的判断退出，这样当前这条的进度照常记上。
+			crawlStats.value.failed++
+			crawlPush(`✗ ${it.adcode} ${it.name}：${r.msg ?? '配额已用尽'}`)
+			stopReason = `配额用尽，停在第 ${i + 1} 条`
+			crawlRunning.value = false
+		} else {
+			crawlStats.value.failed++
+			crawlPush(`✗ ${it.adcode} ${it.name}：${r?.msg ?? '未知错误'}`)
+		}
+
+		crawlDone.value = i + 1
+		if (crawlRunning.value && i < queue.length - 1) await sleep(interval)
+	}
+
+	crawlRunning.value = false
+	crawlCurrent.value = ''
+	const { saved, empty, failed } = crawlStats.value
+	crawlPush(`任务结束：${stopReason || '全部处理完成'}`)
+	ElMessage.success(`补边界结束：已录入 ${saved}，无边界 ${empty}，失败 ${failed}`)
+
+	// 整棵树重挂一次。懒加载的子节点在 EP 内部按 row-key 缓存着旧行，
+	// 单靠 loadList() 只刷根层，刚补好的边界在展开着的节点上还是显示「未录入」。
+	treeKey.value++
+	loadList()
 }
 
 onMounted(loadList)
