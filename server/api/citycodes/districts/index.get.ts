@@ -5,7 +5,7 @@
 //
 // 每行带 hasChildren，前端据此决定要不要画展开箭头；点开某行时再调
 // /api/citycodes/districts/children?adcode=xxx 取它下一层。所以这里不再需要组树。
-import { districtSelectSql } from '../../../utils/district'
+import { computeDerivedDoneStatus, districtSelectSql } from '../../../utils/district'
 
 // 无筛选时的默认根：中国。改成别的 adcode 就能换默认落点
 const DEFAULT_ROOT_ADCODE = '100000'
@@ -59,8 +59,15 @@ export default defineEventHandler((event) => {
       .prepare(`SELECT COUNT(*) AS withBoundary FROM city_codes WHERE polyline IS NOT NULL AND polyline <> ''`)
       .get() as any
 
-    // hasChildren 统一成布尔（EP 懒加载看它的真值决定要不要画箭头）
-    const data = rows.map((r) => ({ ...r, hasChildren: !!r.hasChildren }))
+    // 没有 citycode 记录的行（国家 / 省级）按下属层级汇总出一个状态，规则见 computeDerivedDoneStatus
+    const derived = computeDerivedDoneStatus(db)
+
+    const data = rows.map((r) => ({
+      ...r,
+      // hasChildren 统一成布尔（EP 懒加载看它的真值决定要不要画箭头）
+      hasChildren: !!r.hasChildren,
+      doneStatus: r.doneStatus ?? derived.get(String(r.adcode)) ?? 0
+    }))
 
     return {
       data,

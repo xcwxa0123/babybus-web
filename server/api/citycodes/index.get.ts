@@ -34,8 +34,15 @@ export default defineEventHandler((event) => {
     const { total } = db.prepare(`SELECT COUNT(*) AS total FROM city_codes ${where}`).get(...params) as any
 
     // 当前页数据
-    const rows = db.prepare(`SELECT * FROM city_codes ${where} ORDER BY citycode IS NULL, citycode LIMIT ? OFFSET ?`)
-      .all(...params, pageSize, (page - 1) * pageSize)
+    // 显式列名而不是 SELECT *：city_codes 后来加了 polyline（一个省的边界就有 30 多万字符），
+    // 用 * 会把这么大一坨塞进每次响应里；本接口的调用方（地图页解析 citycode、首页取 total）
+    // 都不需要边界，所以这里直接不带它
+    const rows = db.prepare(`
+      SELECT id, name, adcode, citycode, parent_adcode, level, created_at
+      FROM city_codes ${where}
+      ORDER BY citycode IS NULL, citycode
+      LIMIT ? OFFSET ?
+    `).all(...params, pageSize, (page - 1) * pageSize)
 
     return { data: rows, total, page, pageSize, code: 200, msg: 'ok' }
   } catch (error) {

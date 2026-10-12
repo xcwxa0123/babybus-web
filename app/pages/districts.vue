@@ -60,9 +60,11 @@
 			<!-- lazy + :load：树是按需长的——点开某一行才去查它下一层，
 			     所以接口只给当层数据，不用一次性把整棵树端回来。
 			     row-key 必须有（懒加载靠它记展开状态）；hasChildren 决定要不要画展开箭头。
+			     row-click：整行都能点开（箭头自己的 click 是 stopPropagation 的，不会重复触发）。
 			     max-height：给个自适应高度让表格内部滚动、表头吸顶。 -->
-			<el-table v-loading="loading" :data="list" row-key="id" lazy :load="loadChildren"
-				:tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
+			<el-table ref="tableRef" v-loading="loading" :data="list" row-key="id" lazy
+				:load="loadChildren" :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
+				:row-class-name="rowClassName" @row-click="onRowClick"
 				max-height="clamp(420px, calc(100vh - 360px), 860px)">
 				<template #empty>
 					<div class="empty">
@@ -93,6 +95,20 @@
 						<span v-else class="dash">—</span>
 					</template>
 				</el-table-column>
+				<!-- 线路收录：数据来自 done_num_citycode，按 citycode 关联。
+				     citycode 是城市级的，所以同城的市 / 区县会显示同一个状态（已确认要这样）。 -->
+				<el-table-column label="线路收录" width="140" class-name="col-center"
+					label-class-name="col-center">
+					<template #default="{ row }">
+						<span class="done" :class="`done-${row.doneStatus}`">
+							{{ doneText(row.doneStatus) }}
+							<!-- 数字只在两种情况下显示：
+							     未开始的进度恒为 0/999 没信息量；
+							     汇总行（国家 / 省级）是按下属层级推出来的，本身没有单项进度 -->
+							<b v-if="row.doneStatus > 0 && row.doneNum != null" class="done-num">{{ row.doneNum }}/{{ row.totalNum }}</b>
+						</span>
+					</template>
+				</el-table-column>
 				<el-table-column label="边界" width="110" class-name="col-num"
 					label-class-name="col-num">
 					<template #default="{ row }">
@@ -107,7 +123,8 @@
 				<el-table-column label="操作" width="110" class-name="col-center"
 					label-class-name="col-center">
 					<template #default="{ row }">
-						<el-button size="small" @click="openEdit(row)">编辑</el-button>
+						<!-- stop：别让点按钮顺带把这一行也展开/收起了 -->
+						<el-button size="small" @click.stop="openEdit(row)">编辑</el-button>
 					</template>
 				</el-table-column>
 			</el-table>
@@ -214,8 +231,16 @@ const hasQuery = computed(
 	() => !!(filters.value.name || filters.value.adcode || filters.value.level || filters.value.parentAdcode)
 )
 
+// done_num_citycode.status：0 未开始 / 1 进行中 / 2 已完成
+// （0 那一批是建库时给每个城市插的占位行，显示成「未开始」是对的）
+const DONE_TEXT: Record<number, string> = { 0: '未开始', 1: '进行中', 2: '已完成' }
+
 function levelText(level: any): string {
 	return LEVEL_TEXT[String(level ?? '')] ?? '—'
+}
+
+function doneText(status: any): string {
+	return DONE_TEXT[Number(status)] ?? '—'
 }
 
 // 每个点恰好一个逗号，所以数逗号比数分号准（多环时数分号会少算）
@@ -244,6 +269,22 @@ async function loadList() {
 	} finally {
 		loading.value = false
 	}
+}
+
+const tableRef = ref<any>(null)
+
+// 点整行就能展开 / 收起。
+// EP 的展开箭头在自己的 click 里做了 stopPropagation，所以这里不会和它重复触发；
+// 而 toggleRowExpansion 内部走的是 toggleTreeExpansion，懒加载取数就在那条路径上
+// （tree.mjs: expanded && isUseLazy(data) && loadData(...)），不用手动去调 load。
+function onRowClick(row: any) {
+	if (!row?.hasChildren) return
+	tableRef.value?.toggleRowExpansion(row)
+}
+
+// 只有「有子级」的行给手型光标，叶子行不误导用户去点
+function rowClassName({ row }: { row: any }) {
+	return row?.hasChildren ? 'is-expandable' : ''
 }
 
 // 懒加载：点开某一行才去拉它下面的直接子级。

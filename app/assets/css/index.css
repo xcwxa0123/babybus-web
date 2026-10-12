@@ -193,16 +193,17 @@ footer {
     font-family: 'Noto Sans SC', sans-serif !important;
 }
 
-/* ═══════════ 数据页共用骨架（buslines / markdone / citycodes 三页共用） ═══════════
-   仅单一页面使用的样式分别在 busline.css / markdone.css / citycodes.css 中：
+/* ═══════════ 数据页共用骨架（buslines / markdone 两页共用） ═══════════
+   仅单一页面使用的样式分别在 busline.css / markDone.css / districts.css 中：
    .panel / .line-name / .detail-title 等类名与 Map.vue 的 scoped 同名类冲突，
-   必须挂在页面根类命名空间下，不能裸全局化。 */
+   必须挂在页面根类命名空间下，不能裸全局化。
+   注：districts 页复用同一套视觉规范，但它的骨架样式在自己文件里声明
+   （没有并进下面这组选择器，避免改动波及既有页面）。 */
 
 /* Element Plus 主题变量：对齐全局色板。
    弹窗/气泡/MessageBox 会挂到 body，因此 .app-dialog / .bl-popper / .el-message-box 单独声明一份 */
 .buslines,
 .markdone,
-.citycodes,
 .districts,
 .app-dialog,
 .el-message-box,
@@ -412,8 +413,7 @@ footer {
 
 /* ── 页面骨架 ── */
 .buslines,
-.markdone,
-.citycodes {
+.markdone {
     max-width: 1440px;
     margin: 0 auto;
     padding: 32px 40px 48px;
@@ -421,8 +421,7 @@ footer {
 
 /* ── 页面标题 ── */
 .buslines .page-head,
-.markdone .page-head,
-.citycodes .page-head {
+.markdone .page-head {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
@@ -432,16 +431,14 @@ footer {
 }
 
 .buslines .page-title-wrap,
-.markdone .page-title-wrap,
-.citycodes .page-title-wrap {
+.markdone .page-title-wrap {
     display: flex;
     align-items: baseline;
     gap: 12px;
 }
 
 .buslines .page-title,
-.markdone .page-title,
-.citycodes .page-title {
+.markdone .page-title {
     font-family: 'Noto Serif SC', serif;
     font-size: 26px;
     font-weight: 700;
@@ -450,14 +447,12 @@ footer {
 }
 
 .buslines .page-title .logo-dot,
-.markdone .page-title .logo-dot,
-.citycodes .page-title .logo-dot {
+.markdone .page-title .logo-dot {
     margin-right: 10px;
 }
 
 .buslines .page-meta,
-.markdone .page-meta,
-.citycodes .page-meta {
+.markdone .page-meta {
     font-size: 13px;
     letter-spacing: 1px;
     color: var(--ink-light);
@@ -465,8 +460,7 @@ footer {
 
 /* ── 通用面板 ── */
 .buslines .panel,
-.markdone .panel,
-.citycodes .panel {
+.markdone .panel {
     background: var(--paper);
     border: 1px solid rgba(180, 160, 120, 0.14);
     border-radius: 14px;
@@ -475,14 +469,12 @@ footer {
 
 /* ── 操作区 ── */
 .buslines .tools,
-.markdone .tools,
-.citycodes .tools {
+.markdone .tools {
     padding: 4px 24px;
 }
 
 .buslines .tool-row,
-.markdone .tool-row,
-.citycodes .tool-row {
+.markdone .tool-row {
     display: grid;
     grid-template-columns: 160px 1fr;
     align-items: center;
@@ -491,14 +483,12 @@ footer {
 }
 
 .buslines .tool-row + .tool-row,
-.markdone .tool-row + .tool-row,
-.citycodes .tool-row + .tool-row {
+.markdone .tool-row + .tool-row {
     border-top: 1px solid rgba(180, 160, 120, 0.12);
 }
 
 .buslines .tool-name,
-.markdone .tool-name,
-.citycodes .tool-name {
+.markdone .tool-name {
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -508,16 +498,14 @@ footer {
 }
 
 .buslines .tool-name span,
-.markdone .tool-name span,
-.citycodes .tool-name span {
+.markdone .tool-name span {
     font-size: 12px;
     font-weight: 400;
     color: var(--ink-light);
 }
 
 .buslines .tool-fields,
-.markdone .tool-fields,
-.citycodes .tool-fields {
+.markdone .tool-fields {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -525,26 +513,23 @@ footer {
 }
 
 .buslines .tool-fields .el-button + .el-button,
-.markdone .tool-fields .el-button + .el-button,
-.citycodes .tool-fields .el-button + .el-button {
+.markdone .tool-fields .el-button + .el-button {
     margin-left: 0;
 }
 
-.buslines .w-xs, .markdone .w-xs, .citycodes .w-xs { width: 120px; }
-.buslines .w-sm, .markdone .w-sm, .citycodes .w-sm { width: 150px; }
-.buslines .w-lg, .markdone .w-lg, .citycodes .w-lg { width: 260px; }
+.buslines .w-xs, .markdone .w-xs { width: 120px; }
+.buslines .w-sm, .markdone .w-sm { width: 150px; }
+.buslines .w-lg, .markdone .w-lg { width: 260px; }
 
 /* ── 列表面板 ── */
 .buslines .table-panel,
-.markdone .table-panel,
-.citycodes .table-panel {
+.markdone .table-panel {
     margin-top: 20px;
     overflow: hidden;
 }
 
 .buslines .table-panel .el-table,
-.markdone .table-panel .el-table,
-.citycodes .table-panel .el-table {
+.markdone .table-panel .el-table {
     --el-table-bg-color: var(--paper);
     --el-table-tr-bg-color: var(--paper);
     --el-table-header-bg-color: var(--cream-dark);
@@ -555,33 +540,28 @@ footer {
 }
 
 .buslines .table-panel .el-table th.el-table__cell,
-.markdone .table-panel .el-table th.el-table__cell,
-.citycodes .table-panel .el-table th.el-table__cell {
+.markdone .table-panel .el-table th.el-table__cell {
     font-weight: 500;
     letter-spacing: 0.5px;
 }
 
-/* 表头/单元格居中（三页共用） */
+/* 表头/单元格居中（两页共用） */
 .buslines .table-panel .el-table th.el-table__cell,
 .markdone .table-panel .el-table th.el-table__cell,
-.citycodes .table-panel .el-table th.el-table__cell,
 .buslines .table-panel .el-table td.el-table__cell,
-.markdone .table-panel .el-table td.el-table__cell,
-.citycodes .table-panel .el-table td.el-table__cell {
+.markdone .table-panel .el-table td.el-table__cell {
     text-align: center;
 }
 
 .buslines .line-name,
-.markdone .line-name,
-.citycodes .line-name {
+.markdone .line-name {
     font-weight: 600;
     color: var(--ink);
 }
 
-/* ── 空态（三页共用）：虚线圆巴士图标 + 衬线标题 + 浅色提示 ── */
+/* ── 空态（两页共用）：虚线圆巴士图标 + 衬线标题 + 浅色提示 ── */
 .buslines .empty,
-.markdone .empty,
-.citycodes .empty {
+.markdone .empty {
     padding: 44px 16px 40px;
     text-align: center;
     line-height: 1.7;
@@ -616,8 +596,7 @@ footer {
 
 /* 空态文案占满表格宽度（EP 默认 .el-table__empty-text 只有 50% 宽） */
 .buslines .table-panel .el-table .el-table__empty-text,
-.markdone .table-panel .el-table .el-table__empty-text,
-.citycodes .table-panel .el-table .el-table__empty-text {
+.markdone .table-panel .el-table .el-table__empty-text {
     width: 100%;
 }
 
@@ -626,14 +605,12 @@ footer {
    把 body-wrapper 声明为查询容器后，空态块用 cqw 首帧即等于可视宽度，
    与 EP 挂载后内联的 px 值一致，无需覆盖它的内联样式 */
 .buslines .table-panel .el-table .el-table__body-wrapper,
-.markdone .table-panel .el-table .el-table__body-wrapper,
-.citycodes .table-panel .el-table .el-table__body-wrapper {
+.markdone .table-panel .el-table .el-table__body-wrapper {
     container-type: inline-size;
 }
 
 .buslines .table-panel .el-table .el-table__empty-block,
-.markdone .table-panel .el-table .el-table__empty-block,
-.citycodes .table-panel .el-table .el-table__empty-block {
+.markdone .table-panel .el-table .el-table__empty-block {
     min-width: 100cqw;
 }
 
@@ -650,8 +627,7 @@ footer {
 
 /* ── 分页 ── */
 .buslines .pager,
-.markdone .pager,
-.citycodes .pager {
+.markdone .pager {
     display: flex;
     justify-content: flex-end;
     margin-top: 16px;
@@ -668,28 +644,24 @@ footer {
     }
 
     .buslines,
-    .markdone,
-    .citycodes {
+    .markdone {
         padding: 20px;
     }
 
     .buslines .tools,
-    .markdone .tools,
-    .citycodes .tools {
+    .markdone .tools {
         padding-left: 16px;
         padding-right: 16px;
     }
 
     .buslines .tool-row,
-    .markdone .tool-row,
-    .citycodes .tool-row {
+    .markdone .tool-row {
         grid-template-columns: 1fr;
         gap: 10px;
     }
 
     .buslines .pager,
-    .markdone .pager,
-    .citycodes .pager {
+    .markdone .pager {
         justify-content: center;
         overflow-x: auto;
     }

@@ -199,19 +199,22 @@
     background: var(--cream-dark);
 }
 
+/* 层级配色：省=赭黄 / 市=天蓝 / 区县=鼠尾草绿。
+   三个都统一用「同色 13% 铺底 + 原色文字」这一条公式——
+   之前省级用的是实色变量 --sky，底色比另外两个更饱和，三个徽章视觉重量不齐。 */
 .districts .lv-province {
-    color: var(--sky-accent);
-    background: var(--sky);
+    color: var(--bl-ochre);
+    background: color-mix(in srgb, var(--bl-ochre) 13%, #fff);
 }
 
 .districts .lv-city {
-    color: var(--bl-sage);
-    background: color-mix(in srgb, var(--bl-sage) 13%, #fff);
+    color: var(--sky-accent);
+    background: color-mix(in srgb, var(--sky-accent) 13%, #fff);
 }
 
 .districts .lv-district {
-    color: var(--bl-ochre);
-    background: color-mix(in srgb, var(--bl-ochre) 13%, #fff);
+    color: var(--bl-sage);
+    background: color-mix(in srgb, var(--bl-sage) 13%, #fff);
 }
 
 .districts .lv-street,
@@ -234,6 +237,45 @@
 
 .districts .dash {
     color: var(--ink-faint);
+}
+
+/* 线路收录：状态圆点 + 同色文字 + 进度数字
+   （数据来自 done_num_citycode，citycode 是城市级的，同城共享一条记录）
+   刻意不用填充药丸：「层级」列已经是一排填充徽章，两列都做成药丸、配色又都是绿/赭/灰，
+   挨着看会串。改成「圆点 + 同色文字」后，一眼能分出哪列是分类、哪列是状态。 */
+.districts .done {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--ink-light);
+}
+
+/* 圆点沿用全站已有的圆点语言（.logo-dot），颜色跟着文字走 */
+.districts .done::before {
+    content: '';
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.districts .done-2 { color: var(--bl-sage); }
+.districts .done-1 { color: var(--bl-ochre); }
+.districts .done-0 { color: var(--ink-faint); }
+
+/* 未开始用空心点：实心 = 有进度，空心 = 还没动 */
+.districts .done-0::before {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.districts .done-num {
+    margin-left: 2px;
+    font-weight: 400;
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
 }
 
 /* 边界列 */
@@ -267,6 +309,11 @@
 
 .districts .table-panel .el-table .el-table__empty-block {
     min-width: 100cqw;
+}
+
+/* ── 树形表：整行可点击展开 ── */
+.districts .table-panel .el-table .el-table__row.is-expandable {
+    cursor: pointer;
 }
 
 /* ── 树形表的展开箭头 ── */

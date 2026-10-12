@@ -1,8 +1,0 @@
-/* ═══════════ 城市编码页（citycodes.vue）特有样式 ═══════════
-   页面骨架 / 主题变量 / 表格基础等共用部分见 index.css */
-
-/* 编码列（adcode / citycode）用等宽数字，对齐更整齐 */
-.citycodes .code {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.5px;
-}
