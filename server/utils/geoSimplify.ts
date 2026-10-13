@@ -16,7 +16,8 @@ function pointToSegmentDist(x: number, y: number, ax: number, ay: number, bx: nu
 }
 
 // RDP 抽稀核心（对 [[lng,lat],...] 点数组）
-function rdp(points: [number, number][], epsilon: number): [number, number][] {
+// 导出给 boundary.ts 复用：行政区边界的环也走这个算法（但闭合环要先切分，见那边）
+export function rdp(points: [number, number][], epsilon: number): [number, number][] {
   if (points.length < 3) return points
 
   const [ax, ay] = [lngToX(points[0]![0]), latToY(points[0]![1])]

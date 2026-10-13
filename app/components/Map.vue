@@ -47,6 +47,19 @@
         <!-- 地图 -->
         <div ref="mapRef" class="map"></div>
 
+        <!-- 区域栏：左边面包屑（下钻后靠它回上一级），右边是悬停到的区域名。
+             固定在上方居中而不是跟随鼠标：跟随会随光标抖动 -->
+        <div class="area-bar">
+            <div class="area-trail">
+                <template v-for="(t, i) in areaTrail" :key="t.adcode + '-' + i">
+                    <span v-if="i" class="area-sep">›</span>
+                    <span class="area-crumb" :class="{ current: i === areaTrail.length - 1 }"
+                        :title="t.name" @click="goToArea(i)">{{ t.name }}</span>
+                </template>
+            </div>
+            <span class="area-hover">{{ areaHint }}</span>
+        </div>
+
         <!-- 加载进度条（地图先展示，数据分批渲染时实时推进） -->
         <div v-if="loading" class="map-loading-bar">
             <button class="loading-close" title="关闭并终止加载" @click="stopLoad">×</button>
@@ -640,6 +653,8 @@ function handleLineClick(busId: string, lnglat: any, e: any) {
 function onMapClick(e: any) {
     // 若刚被 polyline click 处理过（200ms 内），跳过，避免重复/误判为空白
     if (Date.now() - lastLineClickAt < 200) return;
+    // 区域块点击同理：那是「挑选区域」，不是「点空白」，别顺手把选中的线路清掉
+    if (Date.now() - lastAreaClickAt < 200) return;
 
     candidatePopup.value.visible = false;
     // 点击空白处：取消选中，但不还原缩放（保持当前视野）
@@ -824,7 +839,10 @@ async function loadData(keyword: string, full = false) {
             if (page < totalPages) await new Promise((r) => setTimeout(r, 120));
         }
 
-        map.setFitView();
+        // 只按线路取景：区域块的 bbox 覆盖整个省甚至整个国家，
+        // 一起算进来会把视野拉得很远（搜一个城市却看到全国）
+        const lineOverlays = Object.values(lineLayers).map((l) => l.polyline).filter(Boolean);
+        if (lineOverlays.length) map.setFitView(lineOverlays);
     } catch (e) {
         if (token === loadToken) loadError.value = "线路数据加载失败，请稍后重试";
     } finally {
@@ -855,6 +873,232 @@ async function reloadAll() {
     loadData("", true);
 }
 
+// ── 区域图层：行政区块 + 悬停高亮 + 点击下钻 ──
+//
+// 数据来自 city_codes 的边界（3638 个行政区全都爬过），服务端按「一个像素」
+// 原则抽稀后下发：34 个省合计约 560KB，gzip 后一百多 KB。
+//
+// ★ 一个关键坑：AMap 的 Polygon.path 是「**一个外环 + 若干内环（洞）**」的结构，
+//   而库里多环行政区的多个环是**并集** —— 浙江 563 环（舟山群岛）、福建 421 环、
+//   广东 242 环、内蒙古 2 环（主体 + 另一片）、甘肃 6 环……都是"好几块地拼成
+//   一个行政区"。把并集当成洞传进一个 Polygon，等于把整块地挖空：既看不见、
+//   也点不到（实测 34 个省里只有新疆 / 西藏 / 山西这类首环即主体的能正常响应）。
+//   所以这里**每个环单独建一个 Polygon**，同属一个行政区的一组记在 areaGroups，
+//   悬停 / 下钻都按组处理 —— 视觉和交互上仍然是一个完整的省。
+//
+// 另一处取舍：每个行政区最多保留 RING_LIMIT 个环，按面积从大到小取。
+// 舟山群岛那种几百个岛的情况，一环一个 overlay 太费；丢的是最小的礁石，
+// 肉眼看不出、交互上也没人想去点一块礁石。
+const RING_LIMIT = 80;
+
+// 刻意与线路图层分开存：loadData 开头的 clearMapLayers() 会清掉所有线路，
+// 区域块不该被它连坐 —— 搜线路和挑区域是两件事，两套状态各管各的。
+let areaOverlays: any[] = [];
+let areaFrame: any = null;
+const areaGroups: Record<string, any[]> = {};
+let hoverCode = "";
+// 区域点击与「点空白处取消选中线路」的隔离时间戳，用法与 lastLineClickAt 一致
+let lastAreaClickAt = 0;
+// 每次下钻自增：连点两个区域时，只认最后一次的结果，别让先发的响应画到后选的区域上
+let areaSeq = 0;
+
+const hoverArea = ref("");
+const areaLoading = ref(false);
+
+// 区县级没有下级了，提示得说清楚；否则用户会一直等它继续往下钻
+const areaHint = computed(() => {
+    if (areaLoading.value) return "正在加载下级…";
+    if (hoverArea.value) return hoverArea.value;
+    return areaScope.value.level === "district" ? "已是最后一级" : "点击区域逐级下钻";
+});
+// 当前范围与面包屑。都来自服务端：ancestors 已经折叠掉「北京城区」这类虚拟层，
+// 前端不自己拼层级关系，两边才不会各说各话。
+const areaScope = ref<any>({ adcode: "100000", name: "中华人民共和国", level: "country" });
+const areaTrail = ref<any[]>([{ adcode: "100000", name: "中华人民共和国", level: "country" }]);
+
+// 服务端为省体积给的是扁平数组 [lng,lat,lng,lat,...]，AMap 的 path 要嵌套格式
+function flatRingToPath(ring: number[]): number[][] {
+    const path: number[][] = [];
+    for (let i = 0; i + 1 < ring.length; i += 2) path.push([ring[i]!, ring[i + 1]!]);
+    return path;
+}
+
+// 鞋带公式算环的面积，只用来给环排序（挑最大的几个），不追求坐标系精度
+function ringArea(ring: number[]): number {
+    let sum = 0;
+    const n = ring.length / 2;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+        sum += ring[j * 2]! * ring[i * 2 + 1]! - ring[i * 2]! * ring[j * 2 + 1]!;
+    }
+    return Math.abs(sum / 2);
+}
+
+function setAreaHover(poly: any, on: boolean) {
+    poly.setOptions(on
+        ? { fillOpacity: 0.42, strokeColor: "#c2410c", strokeWeight: 2.4 }
+        : { fillOpacity: 0.14, strokeColor: "#5b7c99", strokeWeight: 1 });
+}
+
+function applyHover(adcode: string, on: boolean) {
+    for (const poly of areaGroups[adcode] || []) setAreaHover(poly, on);
+}
+
+// 悬停以「行政区」为单位，而不是单个环：
+// 鼠标从主体移到自己的一个岛上时，AMap 会先 out(旧环) 再 over(新环)，
+// 所以 out 只在 adcode 仍然匹配时才清 —— 否则整组高亮会被自己人清掉。
+// 一清一设发生在同一次 mousemove 里，Vue 又会合并到同一帧渲染，肉眼看不到闪烁。
+function setHoverArea(adcode: string, name: string) {
+    if (hoverCode === adcode) return;
+    if (hoverCode) applyHover(hoverCode, false);
+    hoverCode = adcode;
+    hoverArea.value = name;
+    applyHover(adcode, true);
+}
+
+function clearHoverArea(adcode: string) {
+    if (hoverCode !== adcode) return;
+    applyHover(adcode, false);
+    hoverCode = "";
+    hoverArea.value = "";
+}
+
+function clearAreaLayer() {
+    areaOverlays.forEach((o) => map?.remove(o));
+    areaOverlays = [];
+    areaFrame = null;
+    Object.keys(areaGroups).forEach((k) => delete areaGroups[k]);
+    hoverCode = "";
+    hoverArea.value = "";
+}
+
+// 画某个范围：下级区块 + 它自己的外框。
+// 服务端会顺手把「下级只有一个且它还有下级」的虚拟层跳掉（北京城区），
+// 并回传 ancestors 给面包屑用 —— 所以这里只管画。
+async function renderArea(adcode: string, precision: "overview" | "detail") {
+    if (!map) return;
+    const token = ++areaSeq;
+    areaLoading.value = true;
+    try {
+        const res = await request("/api/citycodes/districts/childrenRings", {
+            query: { adcode, precision },
+        });
+        if (token !== areaSeq || !map) return; // 已被更晚的一次下钻取代
+        if (res?.code !== 200) return;
+
+        clearAreaLayer();
+
+        const scope = res.scope || {};
+        areaScope.value = {
+            adcode: String(scope.adcode ?? adcode),
+            name: scope.name ?? "",
+            level: scope.level ?? "",
+        };
+        if (Array.isArray(scope.ancestors) && scope.ancestors.length) {
+            areaTrail.value = scope.ancestors;
+        }
+
+        // 当前范围的外框：下钻之后不至于迷失自己在哪。国家级为空（底图本来就有国界）
+        const framePath = (scope.rings || []).map(flatRingToPath);
+        if (framePath.length) {
+            areaFrame = new AMap.Polygon({
+                path: framePath,
+                strokeColor: "#b8860b",
+                strokeWeight: 2,
+                strokeOpacity: 0.9,
+                strokeStyle: "dashed",
+                fillOpacity: 0,
+                // 必须压在区域块（40）**之下**：外框是个覆盖整省的大多边形，
+                // fillOpacity 0 只是看着透明，命中检测照样参与，压在子块之上会把
+                // 整片区域的悬停和点击全部吃掉（实测下钻后 8/8 点位无响应）。
+                // 都仍在线路（100/200）之下。
+                zIndex: 35,
+            });
+            map.add(areaFrame);
+            areaOverlays.push(areaFrame);
+        }
+
+        for (const item of res.data || []) {
+            const rings: number[][] = (item.rings || [])
+                .map((ring: number[]) => ({ ring, area: ringArea(ring) }))
+                .sort((a: any, b: any) => b.area - a.area)
+                .slice(0, RING_LIMIT)
+                .map((entry: any) => entry.ring);
+
+            const group: any[] = [];
+            for (const ring of rings) {
+                const path = flatRingToPath(ring);
+                if (path.length < 3) continue; // 成不了面的碎环直接跳过
+                const poly = new AMap.Polygon({
+                    path,
+                    strokeColor: "#5b7c99",
+                    strokeWeight: 1,
+                    strokeOpacity: 0.85,
+                    fillColor: "#7ba7c9",
+                    fillOpacity: 0.14,
+                    cursor: "pointer",
+                    zIndex: 40,
+                    // 注意：这里**不能**用 bubble: false —— 实测那样连覆盖物自己的
+                    // mouseover / click 都不再触发（AMap 的命中检测与冒泡是同一套机制）。
+                    // 与「点空白处取消选中线路」的隔离改用时间戳，和线路点击同一套路。
+                });
+                poly.on("mouseover", () => setHoverArea(item.adcode, item.name));
+                poly.on("mouseout", () => clearHoverArea(item.adcode));
+                poly.on("click", () => {
+                    // 点击即下钻：换成它这一级重画。
+                    // 区县级没有下级，就停在它自己身上（只剩外框），不再往下。
+                    lastAreaClickAt = Date.now();
+                    renderArea(String(item.adcode), "detail");
+                });
+                map.add(poly);
+                group.push(poly);
+            }
+            if (group.length) {
+                areaGroups[item.adcode] = group;
+                areaOverlays.push(...group);
+            }
+        }
+
+        // 取景：国家级回到固定的全国视野，下钻时按各块 bbox 求并集 setBounds。
+        //
+        // 国家级**不能**用 setBounds：中国的 bbox 接近正方形，塞进 2.4:1 的横向视口后
+        // 纬度方向会溢出很多（Web Mercator 还会进一步放大高纬度），结果能看到整个亚洲，
+        // 反而比写死的 zoom/center 差。下钻到省 / 市时 bbox 小得多，setBounds 就合适了。
+        if (String(scope.adcode) === "100000") {
+            map.setZoomAndCenter(5, [104.2, 35.8]);
+        } else {
+            const boxes = (res.data || []).map((item: any) => item.bbox).filter(Boolean);
+            if (scope.bbox) boxes.push(scope.bbox);
+            if (boxes.length) {
+                let minLng = Infinity;
+                let minLat = Infinity;
+                let maxLng = -Infinity;
+                let maxLat = -Infinity;
+                for (const box of boxes) {
+                    if (box[0] < minLng) minLng = box[0];
+                    if (box[1] < minLat) minLat = box[1];
+                    if (box[2] > maxLng) maxLng = box[2];
+                    if (box[3] > maxLat) maxLat = box[3];
+                }
+                map.setBounds(new AMap.Bounds([minLng, minLat], [maxLng, maxLat]));
+            }
+        }
+    } catch (e) {
+        // 区域块是锦上添花：加载失败不该影响搜线路，所以只记一笔、不打扰用户。
+        // 但一定要留下痕迹 —— 吞掉异常会让"什么都没画出来"变成一个查不出原因的现象。
+        console.warn("[areaLayer] 区域块加载失败：", e);
+    } finally {
+        if (token === areaSeq) areaLoading.value = false;
+    }
+}
+
+// 面包屑：跳回任意一级。点当前这一级不做任何事。
+function goToArea(index: number) {
+    if (index < 0 || index >= areaTrail.value.length) return;
+    if (index === areaTrail.value.length - 1) return;
+    const target = areaTrail.value[index];
+    renderArea(String(target.adcode), String(target.adcode) === "100000" ? "overview" : "detail");
+}
+
 // 初始化地图（仅创建一次）
 async function initMap() {
     // @ts-ignore
@@ -866,13 +1110,25 @@ async function initMap() {
     });
 
     map = new AMap.Map(mapRef.value!, {
-        zoom: 9,
-        center: [120.5, 37.6],
+        // 初始视野给全国：这一屏先让用户挑区域（区域块在省级）。
+        // 搜城市不受影响 —— loadData 末尾会 setFitView 到线路范围。
+        zoom: 5,
+        center: [104.2, 35.8],
         mapStyle: "amap://styles/whitesmoke", // 浅色极简底图，凸显公交线路
     });
 
     // 点击地图：命中线路则选中；多条线路时弹候选
     map.on("click", onMapClick);
+
+    // 指针离开地图时收掉区域浮标。
+    // 不能只靠多边形的 mouseout：指针直接移出画布时 AMap 不会再做命中检测，
+    // 那个多边形的 mouseout 就永远不触发，浮标会一直挂着上一个区域的名字。
+    map.on("mouseout", () => {
+        if (hoverCode) clearHoverArea(hoverCode);
+    });
+
+    // 区域块延后加载：先把地图显示出来，别让边界数据挡住首屏
+    renderArea("100000", "overview");
 
     // await loadData(keywordInput.value);
 }
@@ -881,6 +1137,7 @@ onMounted(initMap);
 
 onUnmounted(() => {
     stopLoad(); // 卸载时先终止分页轮询
+    clearAreaLayer();
     map?.destroy();
 });
 
