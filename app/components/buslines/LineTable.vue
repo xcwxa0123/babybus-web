@@ -65,10 +65,12 @@
 				</template>
 			</el-table-column>
 
-			<el-table-column label="操作" width="100" class-name="col-center" label-class-name="col-center">
+			<!-- 行内操作：加宽到容下两个按钮不折行；固定右侧，横向滚动时始终可见 -->
+			<el-table-column label="操作" width="140" fixed="right" class-name="col-center"
+				label-class-name="col-center">
 				<template #default="{ row }">
-					<el-button size="small" text type="primary" @click.stop="openEdit(row)">编辑</el-button>
-					<el-button size="small" text type="danger" @click.stop="removeLine(row)">删除</el-button>
+					<el-button size="small" @click.stop="openEdit(row)">编辑</el-button>
+					<el-button size="small" type="danger" plain @click.stop="removeLine(row)">删除</el-button>
 				</template>
 			</el-table-column>
 		</el-table>

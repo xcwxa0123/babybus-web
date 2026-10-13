@@ -578,3 +578,60 @@
         transition: none;
     }
 }
+
+/* ── 区域栏：面包屑 + 悬停区域名（区域图层和逻辑都在 Map.vue 里） ──
+   固定在地图上方居中而不是跟随鼠标：跟随会随光标抖动；
+   面包屑是下钻之后回上一级的唯一入口，所以要能点（不加 pointer-events: none） */
+.busmap-page .area-bar {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 72%;
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: rgba(255, 254, 249, 0.94);
+    border: 1px solid rgba(180, 160, 120, 0.28);
+    box-shadow: var(--shadow-sm);
+    font-size: 12px;
+    color: var(--ink);
+    z-index: 20;
+}
+
+.busmap-page .area-trail {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+}
+
+.busmap-page .area-crumb {
+    color: var(--ink-mid);
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+}
+
+.busmap-page .area-crumb:hover {
+    color: var(--sky-accent);
+    border-bottom-color: currentColor;
+}
+
+.busmap-page .area-crumb.current {
+    color: var(--ink);
+    font-weight: 600;
+    cursor: default;
+    border-bottom-color: transparent;
+}
+
+.busmap-page .area-sep {
+    color: var(--ink-faint);
+}
+
+.busmap-page .area-hover {
+    color: var(--bl-ochre);
+    white-space: nowrap;
+}
