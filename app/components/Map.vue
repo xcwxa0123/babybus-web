@@ -139,7 +139,12 @@
 
 <script setup lang="ts">
 import { Search, ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
-import AMapLoader from "@amap/amap-jsapi-loader";
+
+// 注意：@amap/amap-jsapi-loader **不能**在模块顶层 import ——
+// 它的 CJS 版在 import 时就会去读 window，服务端一加载整个页面 500
+// （实测报错 "window is not defined"，栈顶就在这个包的第 6 行）。
+// 所以挪到 initMap 里动态加载，并用 import.meta.client 挡一下：
+// 那是编译期常量，服务端打包时整个分支会被摇掉，模块根本不会进服务端产物。
 
 interface BusStop {
     id: string;
@@ -779,6 +784,9 @@ async function loadData(keyword: string, full = false) {
     progress.value = 0;
     totalLines.value = 0;
     clearMapLayers();
+    // 区域线路会被 clearMapLayers 一起清掉，进度也得归零，
+    // 否则区县那层的提示会挂着一个旧条数，和地图上的内容对不上
+    areaLineProgress.value = { loaded: 0, total: 0, drawn: 0 };
 
     try {
         // 全量模式跳过城市解析；普通搜索必须能解析出 citycode
@@ -894,7 +902,8 @@ const RING_LIMIT = 80;
 // 刻意与线路图层分开存：loadData 开头的 clearMapLayers() 会清掉所有线路，
 // 区域块不该被它连坐 —— 搜线路和挑区域是两件事，两套状态各管各的。
 let areaOverlays: any[] = [];
-let areaFrame: any = null;
+// 外框是「每个环一条折线」，所以是数组（见 renderArea 里的说明）
+let areaFrame: any[] = [];
 const areaGroups: Record<string, any[]> = {};
 let hoverCode = "";
 // 区域点击与「点空白处取消选中线路」的隔离时间戳，用法与 lastLineClickAt 一致
@@ -908,8 +917,19 @@ const areaLoading = ref(false);
 // 区县级没有下级了，提示得说清楚；否则用户会一直等它继续往下钻
 const areaHint = computed(() => {
     if (areaLoading.value) return "正在加载下级…";
+    if (areaLineBusy.value) {
+        const { loaded, total } = areaLineProgress.value;
+        return total
+            ? `正在加载本区线路 ${Math.min(100, Math.round((loaded / total) * 100))}%`
+            : "正在加载本区线路…";
+    }
     if (hoverArea.value) return hoverArea.value;
-    return areaScope.value.level === "district" ? "已是最后一级" : "点击区域逐级下钻";
+    // 区县级没有下级了，这里是终点；顺便把本区线路条数报一下
+    if (areaScope.value.level === "district") {
+        const { drawn, total } = areaLineProgress.value;
+        return total ? `已是最后一级 · 本区 ${total} 条线路，渲染 ${drawn} 条` : "已是最后一级";
+    }
+    return "点击区域逐级下钻";
 });
 // 当前范围与面包屑。都来自服务端：ancestors 已经折叠掉「北京城区」这类虚拟层，
 // 前端不自己拼层级关系，两边才不会各说各话。
@@ -965,10 +985,76 @@ function clearHoverArea(adcode: string) {
 function clearAreaLayer() {
     areaOverlays.forEach((o) => map?.remove(o));
     areaOverlays = [];
-    areaFrame = null;
+    areaFrame = [];
     Object.keys(areaGroups).forEach((k) => delete areaGroups[k]);
     hoverCode = "";
     hoverArea.value = "";
+}
+
+// ── 区域线路：钻到区县级之后，把这个区的线路画出来 ──
+//
+// 刻意**复用「搜城市」那一整套管线**（clearMapLayers / renderLine / dedupeLines /
+// allLines / lines），而不是自己再画一遍。理由很实在：
+//   · 样式一致是结构保证的 —— 用的是同一个 renderLine，白色描边、线宽、透明度、
+//     手型光标一个字都不会差；将来改样式也只有一处
+//   · 点选、底部详情、站点圆圈、反向切换、候选弹窗全部现成可用
+// 所以这里只做一件事：把接口数据凑成 pipeline 认识的 BusLine，喂给它。
+let areaLineSeq = 0;
+const areaLineBusy = ref(false);
+const areaLineProgress = ref({ loaded: 0, total: 0, drawn: 0 });
+
+function clearAreaLines() {
+    areaLineSeq++; // 正在跑的批次循环会看到序号变了，自己退出
+    clearMapLayers(); // 线路、站点、选中态、详情面板一起重置
+    areaLineBusy.value = false;
+    areaLineProgress.value = { loaded: 0, total: 0, drawn: 0 };
+}
+
+// 全量拉、边收边画：一个区县可能有几百条（昌平区 639 条），分批能让画面尽早有东西，
+// 进度也可控 —— 与 loadData 的做法完全一致（连每批 100 条、配色按累计下标都一致）。
+async function loadAreaLines(adcode: string) {
+    if (!adcode || !map) return;
+
+    clearMapLayers();
+    const token = ++areaLineSeq;
+    areaLineBusy.value = true;
+    areaLineProgress.value = { loaded: 0, total: 0, drawn: 0 };
+
+    const acc: BusLine[] = [];
+    const limit = 100;
+
+    try {
+        for (let offset = 0; ; offset += limit) {
+            const res = await request("/api/buslines/byAreaAll", {
+                query: { adcode, offset, limit, epsilon: 12 },
+            });
+            if (token !== areaLineSeq || !map) return; // 已被更晚的一次下钻取代
+            if (res?.code !== 200) return;
+            if (!areaLineProgress.value.total) areaLineProgress.value.total = res.total ?? 0;
+
+            // 配色按「累计下标」分配，和 loadData 同一套规则，颜色才不会跳
+            const batch = (res.data ?? []).map((line: any, i: number) => {
+                const [c1, c2] = PALETTE[(acc.length + i) % PALETTE.length]!;
+                return { ...line, color: c1, color2: c2 } as BusLine;
+            });
+            acc.push(...batch);
+            allLines.value = acc;
+
+            // 去重反向后逐条渲染（正向才画，反向留在 allLines 里供"切换反向"用）
+            dedupeLines(batch).forEach((line) => {
+                if (!lineLayers[line.id]) renderLine(line, line.color!);
+            });
+            lines.value = dedupeLines(acc);
+            areaLineProgress.value.drawn = lines.value.length;
+
+            areaLineProgress.value.loaded = offset + batch.length;
+            if (res.done || !batch.length) break;
+        }
+    } catch (e) {
+        console.warn("[areaLayer] 区域线路加载失败：", e);
+    } finally {
+        if (token === areaLineSeq) areaLineBusy.value = false;
+    }
 }
 
 // 画某个范围：下级区块 + 它自己的外框。
@@ -997,24 +1083,33 @@ async function renderArea(adcode: string, precision: "overview" | "detail") {
             areaTrail.value = scope.ancestors;
         }
 
-        // 当前范围的外框：下钻之后不至于迷失自己在哪。国家级为空（底图本来就有国界）
-        const framePath = (scope.rings || []).map(flatRingToPath);
-        if (framePath.length) {
-            areaFrame = new AMap.Polygon({
-                path: framePath,
-                strokeColor: "#b8860b",
-                strokeWeight: 2,
-                strokeOpacity: 0.9,
-                strokeStyle: "dashed",
-                fillOpacity: 0,
-                // 必须压在区域块（40）**之下**：外框是个覆盖整省的大多边形，
-                // fillOpacity 0 只是看着透明，命中检测照样参与，压在子块之上会把
-                // 整片区域的悬停和点击全部吃掉（实测下钻后 8/8 点位无响应）。
-                // 都仍在线路（100/200）之下。
-                zIndex: 35,
+        // 当前范围的外框：下钻之后不至于迷失自己在哪。国家级为空（底图本来就有国界）。
+        //
+        // ★ 用 **Polyline**（每个环一条）而不是 Polygon，这是踩过两次坑之后的选择：
+        //   · Polygon 的填充哪怕 fillOpacity 0 也照样参与命中检测，压在子块之上会把
+        //     整片区域的悬停和点击吃光（实测下钻后 8/8 点位无响应）；
+        //   · 压到子块之下又会被子块自己的边界盖住 —— 外框和子块的外沿几乎是同一条线
+        //     （只是抽稀精度不同：省 1200m vs 区县 80m），只有两条线错开的地方才露出来，
+        //     看起来就是「边界线时有时无」。
+        // 折线只在描边上命中、内部可穿透，所以既能放在子块之上，又不挡子块的交互。
+        const frameRings: number[][][] = (scope.rings || [])
+            .map(flatRingToPath)
+            .filter((p: number[][]) => p.length >= 2);
+        if (frameRings.length) {
+            areaFrame = frameRings.map((path: number[][]) => {
+                const line = new AMap.Polyline({
+                    path,
+                    strokeColor: "#b8860b",
+                    strokeWeight: 2,
+                    strokeOpacity: 0.9,
+                    strokeStyle: "dashed",
+                    // 层级：区域块 2 < 外框 8 < 线路 10/50/100
+                    zIndex: 8,
+                });
+                map.add(line);
+                areaOverlays.push(line);
+                return line;
             });
-            map.add(areaFrame);
-            areaOverlays.push(areaFrame);
         }
 
         for (const item of res.data || []) {
@@ -1036,7 +1131,10 @@ async function renderArea(adcode: string, precision: "overview" | "detail") {
                     fillColor: "#7ba7c9",
                     fillOpacity: 0.14,
                     cursor: "pointer",
-                    zIndex: 40,
+                    // 区域块压在线路之下（线路走 STYLE.default，zIndex 10）：
+                    // 层级定成 区域块 2 < 外框 8 < 线路 10/50/100，
+                    // 这样线路永远在最上面，不会被半透明的省块盖住。
+                    zIndex: 2,
                     // 注意：这里**不能**用 bubble: false —— 实测那样连覆盖物自己的
                     // mouseover / click 都不再触发（AMap 的命中检测与冒泡是同一套机制）。
                     // 与「点空白处取消选中线路」的隔离改用时间戳，和线路点击同一套路。
@@ -1082,6 +1180,12 @@ async function renderArea(adcode: string, precision: "overview" | "detail") {
                 map.setBounds(new AMap.Bounds([minLng, minLat], [maxLng, maxLat]));
             }
         }
+
+        // 只有钻到区县级（最后一层）才查线路。
+        // 省 / 市级动辄几千条（北京 4120），而这一步要回答的是"这个区有哪些线路"，
+        // 区县级的量才合适；往上退时顺手把线路清掉。
+        if (String(scope.level) === "district") loadAreaLines(String(scope.adcode));
+        else clearAreaLines();
     } catch (e) {
         // 区域块是锦上添花：加载失败不该影响搜线路，所以只记一笔、不打扰用户。
         // 但一定要留下痕迹 —— 吞掉异常会让"什么都没画出来"变成一个查不出原因的现象。
@@ -1101,9 +1205,12 @@ function goToArea(index: number) {
 
 // 初始化地图（仅创建一次）
 async function initMap() {
+    if (!import.meta.client) return;
+
     // @ts-ignore
     window._AMapSecurityConfig = { securityJsCode: config.public.mapsc };
 
+    const { default: AMapLoader } = await import("@amap/amap-jsapi-loader");
     AMap = await AMapLoader.load({
         key: config.public.mapscKey as string,
         version: "2.0",
@@ -1137,6 +1244,7 @@ onMounted(initMap);
 
 onUnmounted(() => {
     stopLoad(); // 卸载时先终止分页轮询
+    clearAreaLines();
     clearAreaLayer();
     map?.destroy();
 });

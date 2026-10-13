@@ -31,7 +31,7 @@ export default defineEventHandler((event) => {
     const limit = Math.min(300, Math.max(1, Number(query.limit) || 100))
     // 出图抽稀容差（米）。默认 20m：比列表用的原样粗、比缩略图细，
     // 前端可以按需要调大（画全省时调大能明显提速）。
-    const epsilon = Math.min(300, Math.max(5, Number(query.epsilon) || 20))
+    const epsilon = Math.min(300, Math.max(5, Number(query.epsilon) || 12))
 
     const db = getDb()
 
@@ -55,7 +55,9 @@ export default defineEventHandler((event) => {
     // 分页就会出现「某条重复出现、另一条永远看不到」这种鬼打墙。
     const rows = db
       .prepare(`
-        SELECT l.id, l.name, l.uicolor, l.polyline, l.start_stop, l.end_stop, l.direc,
+        SELECT l.id, l.name, l.type, l.uicolor, l.polyline, l.citycode,
+               l.start_stop, l.end_stop, l.direc, l.start_time, l.end_time,
+               l.distance, l.basic_price, l.total_price, l.timedesc,
                COUNT(*)        AS areaCount,
                SUM(a.stop_num) AS stopNum,
                MAX(a.is_start) AS isStart,
@@ -69,17 +71,34 @@ export default defineEventHandler((event) => {
       `)
       .all(...subDists, limit, offset) as any[]
 
+    // 站点：字段与查法和 /api/buslines/map 完全一致 —— 前端那条线路管线
+    // （点选、底部详情、站点圆圈）依赖它，缺了站点那一套就跑不起来
+    let stops: any[] = []
+    if (rows.length) {
+      const marks = rows.map(() => '?').join(',')
+      stops = db.prepare(`
+        SELECT b.bus_id, s.id, s.name, s.location, b.seq AS sequence
+        FROM bus_stop_sequences b
+        JOIN bus_stops s ON s.id = b.stop_id
+        WHERE b.bus_id IN (${marks})
+        ORDER BY b.bus_id, b.seq ASC
+      `).all(...rows.map((l: any) => l.id)) as any[]
+    }
+
+    const stopsByLine = new Map<string, any[]>()
+    for (const stop of stops) {
+      const arr = stopsByLine.get(stop.bus_id)
+      if (arr) arr.push(stop)
+      else stopsByLine.set(stop.bus_id, [stop])
+    }
+
     const data = rows.map((line: any) => ({
-      id: line.id,
-      name: line.name,
-      uicolor: line.uicolor,
-      start_stop: line.start_stop,
-      end_stop: line.end_stop,
-      direc: line.direc, // 给前端做正/反向去重（沿用 /map 那套）
+      ...line,
       areaCount: line.areaCount,
       stopNum: line.stopNum,
       isStart: line.isStart,
       isEnd: line.isEnd,
+      busstops: (stopsByLine.get(line.id) || []).map(({ bus_id, ...rest }) => rest),
       // 入库不抽稀（保留精度），出图时才抽 —— 与 /api/buslines/map 同一套口径
       polyline: simplifyPolyline(line.polyline || '', epsilon, 5),
     }))
