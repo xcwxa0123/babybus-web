@@ -1,72 +1,88 @@
 /* ═══════════ 公交线路库页（buslines.vue）特有样式 ═══════════
-   页面骨架 / 主题变量 / 表格基础等共用部分见 index.css */
+   页面骨架 / 主题变量 / 表格基础等共用部分见 index.css（与 markdone 共用，这里不动它）。
+
+   页面结构（对应 buslines.vue 及 components/buslines/*）：
+     .page-head
+     .task-panel      数据任务（TaskPull / TaskMapping，标签页）
+     .layout
+       .side          行政区树（AreaPanel）
+       .main          线路列表（LineTable）+ 分页
+     .bl-drawer       线路详情抽屉（LineDetail，挂在 .buslines 下） */
 
 /* 区间分隔符（循环拉取 keyword 起止输入框之间） */
 .buslines .range-sep {
     color: var(--ink-light);
 }
 
-/* ── 循环拉取：重操作，独立次级面板（琥珀色警示边界） ── */
-.buslines .loop-panel {
-    margin-top: 20px;
-    padding: 16px 24px 18px;
-    border-color: color-mix(in srgb, var(--bl-ochre) 24%, transparent);
-    border-left: 3px solid var(--bl-ochre);
-    background: linear-gradient(90deg,
-        color-mix(in srgb, var(--bl-ochre) 6%, var(--paper)),
-        var(--paper) 55%);
+/* ── 数据任务面板：拉取入库 / 区域映射（低频、重操作，收在一个面板里） ── */
+.buslines .task-panel {
+    padding: 0 24px;
 }
 
-.buslines .loop-panel.running {
-    border-color: color-mix(in srgb, var(--bl-ochre) 42%, transparent);
-    border-left-color: var(--bl-ochre);
+/* 有任务在跑：左侧一道琥珀色边线（用内阴影，避免切换时撑动布局） */
+.buslines .task-panel.running {
+    border-color: color-mix(in srgb, var(--bl-ochre) 32%, transparent);
+    box-shadow: inset 3px 0 0 var(--bl-ochre), var(--shadow-sm);
 }
 
-.buslines .loop-head {
-    margin-bottom: 14px;
+.buslines .task-tabs .el-tabs__header {
+    margin: 0;
 }
 
-.buslines .loop-title {
-    display: flex;
+.buslines .task-tabs .el-tabs__nav-wrap::after {
+    height: 1px;
+    background-color: rgba(180, 160, 120, 0.14);
+}
+
+.buslines .task-tabs .el-tabs__item {
+    height: 46px;
+    line-height: 46px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.buslines .task-tab {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-family: 'Noto Serif SC', serif;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--ink);
+    gap: 6px;
 }
 
-.buslines .loop-title::before {
-    content: '';
-    flex: none;
+/* 标签页上的「任务运行中」小圆点 */
+.buslines .run-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: var(--bl-ochre);
+    animation: bl-pulse 1.4s ease-in-out infinite;
 }
 
-.buslines .loop-sub {
-    margin-top: 3px;
+@keyframes bl-pulse {
+    50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .buslines .run-dot {
+        animation: none;
+    }
+}
+
+.buslines .task-pane {
+    padding: 16px 0 18px;
+}
+
+.buslines .task-hint {
+    max-width: 760px;
+    margin-top: 10px;
     font-size: 12px;
+    line-height: 1.7;
     color: var(--ink-light);
 }
 
-.buslines .loop-body {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-.buslines .loop-body .el-button + .el-button {
-    margin-left: 0;
-}
-
-/* ── 循环任务进度 ── */
-.buslines .run {
-    margin-top: 20px;
-    padding: 20px 24px 24px;
+/* ── 任务进度（TaskProgress，拉取与映射共用） ── */
+.buslines .task-progress {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px dashed rgba(180, 160, 120, 0.3);
 }
 
 .buslines .run-head {
@@ -131,6 +147,27 @@
     line-height: 1.9;
     color: var(--ink-mid);
     font-variant-numeric: tabular-nums;
+}
+
+/* ── 浏览区布局：左行政区、右列表 ──
+   minmax(0, 1fr) 必须写：不然宽表格会把右栏撑出容器 */
+.buslines .layout {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+    margin-top: 20px;
+}
+
+/* 行政区树跟随滚动，选区域时始终在视野内（7.9vh 是顶栏高度） */
+.buslines .side {
+    position: sticky;
+    top: calc(7.9vh + 16px);
+}
+
+/* index.css 给 .table-panel 留了上边距，在栅格里由 gap 负责间距 */
+.buslines .layout .table-panel {
+    margin-top: 0;
 }
 
 /* ── 表格对齐：默认文本左对齐（覆盖 index.css 的全局居中）；
@@ -231,33 +268,69 @@
     color: var(--ink-mid);
 }
 
-/* ── 线路详情（站点列表） ── */
-.buslines .detail {
-    margin-top: 20px;
-    padding: 20px 24px 24px;
-    scroll-margin-top: calc(7.9vh + 16px);
+/* ── 线路详情抽屉（站点列表） ──
+   头部/标题的语言与 index.css 里 .app-dialog 一致：发丝分割线 + 衬线标题 + 圆点。
+   EP 的抽屉把内边距放在根元素的 --el-drawer-padding-primary 上，这里归零后自己分区。 */
+.buslines .bl-drawer.el-drawer {
+    --el-drawer-padding-primary: 0;
+    max-width: 100vw;
+    background: var(--paper);
+    box-shadow: var(--shadow-lg);
 }
 
-.buslines .detail-head {
+.buslines .bl-drawer .el-drawer__header {
+    margin: 0;
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
+}
+
+.buslines .bl-drawer .el-drawer__title {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.buslines .detail-title {
+    gap: 10px;
     font-family: 'Noto Serif SC', serif;
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
     letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.buslines .bl-drawer .el-drawer__title::before {
+    content: '';
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sky-accent);
+}
+
+.buslines .bl-drawer .el-drawer__body {
+    padding: 18px 24px 28px;
+}
+
+.buslines .detail-hint {
+    padding: 28px 0;
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-light);
 }
 
 .buslines .detail-id {
-    margin-top: 2px;
     font-size: 12px;
     color: var(--ink-light);
     word-break: break-all;
+}
+
+.buslines .detail-route {
+    margin-top: 6px;
+    font-size: 14px;
+    color: var(--ink);
+}
+
+.buslines .detail-count {
+    margin: 14px 0 4px;
+    font-size: 12px;
+    color: var(--ink-light);
 }
 
 .buslines .stops {
@@ -301,82 +374,18 @@
     color: var(--ink-light);
 }
 
-/* ── 重建映射：重操作，独立次级面板（与循环拉取同一套琥珀警示语言） ── */
-.buslines .map-panel {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 14px 20px;
-    margin-top: 20px;
-    padding: 16px 24px 18px;
-    border-color: color-mix(in srgb, var(--bl-ochre) 24%, transparent);
-    border-left: 3px solid var(--bl-ochre);
-    background: linear-gradient(90deg,
-        color-mix(in srgb, var(--bl-ochre) 6%, var(--paper)),
-        var(--paper) 55%);
-}
-
-.buslines .map-panel.running {
-    border-color: color-mix(in srgb, var(--bl-ochre) 42%, transparent);
-    border-left-color: var(--bl-ochre);
-}
-
-.buslines .map-head {
-    min-width: 0;
-}
-
-.buslines .map-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: 'Noto Serif SC', serif;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--ink);
-}
-
-.buslines .map-title::before {
-    content: '';
-    flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--bl-ochre);
-}
-
-.buslines .map-sub {
-    margin-top: 3px;
-    font-size: 12px;
-    line-height: 1.6;
-    color: var(--ink-light);
-}
-
-.buslines .map-body {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: none;
-}
-
-.buslines .map-body .el-button + .el-button {
-    margin-left: 0;
-}
-
-/* ── 按行政区查线路：懒加载树面板 ── */
+/* ── 按行政区查线路：左栏树面板 ── */
 .buslines .area-panel {
-    margin-top: 20px;
-    padding: 18px 24px 20px;
+    padding: 16px 18px 18px;
     overflow: hidden;
 }
 
 .buslines .area-head {
     display: flex;
-    align-items: flex-end;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 8px;
+    margin-bottom: 12px;
 }
 
 .buslines .area-title {
@@ -390,6 +399,7 @@
 .buslines .area-sub {
     margin-top: 3px;
     font-size: 12px;
+    line-height: 1.6;
     color: var(--ink-light);
 }
 
@@ -398,26 +408,13 @@
 .buslines .area-panel .el-table {
     --el-table-bg-color: var(--paper);
     --el-table-tr-bg-color: var(--paper);
-    --el-table-header-bg-color: var(--cream-dark);
-    --el-table-header-text-color: var(--ink-mid);
     --el-table-row-hover-bg-color: color-mix(in srgb, var(--sky) 45%, var(--paper));
     --el-table-border-color: rgba(180, 160, 120, 0.14);
     font-size: 13px;
 }
 
-.buslines .area-panel .el-table th.el-table__cell,
 .buslines .area-panel .el-table td.el-table__cell {
     text-align: left;
-}
-
-.buslines .area-panel .el-table th.col-center.el-table__cell,
-.buslines .area-panel .el-table td.col-center.el-table__cell {
-    text-align: center;
-}
-
-.buslines .area-panel .el-table th.el-table__cell {
-    font-weight: 500;
-    letter-spacing: 0.5px;
 }
 
 .buslines .area-panel .el-table .el-table__row {
@@ -449,7 +446,8 @@
     color: var(--ink);
 }
 
-/* 层级徽章：配色沿用 districts 页那一套（省=赭黄 / 市=天蓝 / 区县=鼠尾草绿） */
+/* 层级徽章：配色沿用 districts 页那一套（省=赭黄 / 市=天蓝 / 区县=鼠尾草绿）
+   树里它紧跟在名称后面，所以收紧一点、留出左间距 */
 .buslines .lv {
     display: inline-block;
     padding: 2px 10px;
@@ -457,6 +455,11 @@
     font-size: 12px;
     color: var(--ink-light);
     background: var(--cream-dark);
+}
+
+.buslines .area-panel .lv {
+    margin-left: 8px;
+    padding: 1px 8px;
 }
 
 .buslines .lv-province { color: var(--bl-ochre); background: color-mix(in srgb, var(--bl-ochre) 13%, #fff); }
@@ -468,11 +471,6 @@
 .buslines .lv-unknown {
     color: var(--ink-light);
     background: var(--cream-dark);
-}
-
-.buslines .area-current {
-    font-size: 12px;
-    color: var(--sky-accent);
 }
 
 /* ── 线路列表表头（说明当前是在看哪个区域） ── */
@@ -519,12 +517,24 @@
     font-variant-numeric: tabular-nums;
 }
 
+.buslines .role + .cover {
+    margin-left: 8px;
+}
+
 /* ── 响应式（本页特有部分） ── */
+@media (max-width: 1024px) {
+    /* 窄屏：左右两栏叠成上下，行政区树不再吸顶 */
+    .buslines .layout {
+        grid-template-columns: 1fr;
+    }
+
+    .buslines .side {
+        position: static;
+    }
+}
+
 @media (max-width: 760px) {
-    .buslines .run,
-    .buslines .detail,
-    .buslines .loop-panel,
-    .buslines .map-panel,
+    .buslines .task-panel,
     .buslines .area-panel {
         padding-left: 16px;
         padding-right: 16px;
