@@ -85,6 +85,9 @@
                     <div class="form-tab" :class="{ active: activeTab === 'login' }" @click="switchTab('login')">登录
                     </div>
                 </div>
+                <div class="form-tab" :class="{ active: activeTab === 'register' }" @click="switchTab('register')">
+                    注册
+                </div>
 
                 <!-- LOGIN FORM -->
                 <transition name="tab-fade" mode="out-in">
