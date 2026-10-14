@@ -1,178 +1,116 @@
 <template>
-    <div class="page-container">
-        <!-- LEFT PANEL -->
-        <div class="bg-left">
-            <div class="left-content">
-                <!-- Logo -->
-                <div class="left-logo">
-                    <div
-                        style="font-family:'Noto Serif SC',serif;font-size:24px;font-weight:700;color:var(--ink);letter-spacing:4px;">
-                        <span class="logo-dot"></span>宝宝巴适
-                    </div>
-                    <div
-                        style="font-family:'Playfair Display',serif;font-style:italic;font-size:13px;color:var(--ink-light);">
-                        Baby · Bus</div>
-                </div>
-
-                <!-- Hero -->
-                <div class="left-hero">
-                    <div class="left-eyebrow">WELCOME BACK</div>
-                    <h1 class="left-title">
-                        嘻嘻<br>
-                        <em>别想动我数据捏</em>
-                    </h1>
-                    <p class="left-desc">看看就行了，别动我数据。</p>
-
-                    <div class="left-quote">"不是我说凭什么有地铁轨道交通线路图没有公交交通线路图，看不起我们公交车是吧。"</div>
-
-                    <div class="left-stats">
-                        <div class="stat-item">
-                            <div class="stat-num">{{ total }}</div>
-                            <div class="stat-lbl">收录公交线路</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-num">{{ adcodeCount }}</div>
-                            <div class="stat-lbl">收录城市</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-num">每日</div>
-                            <div class="stat-lbl">实时更新</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Footer -->
-                <div class="left-footer">© 2026 宝宝巴适 · 仅供学习交流</div>
+    <!-- 登录 / 注册单页。
+         样式语言与数据页一致：页头复用 index.css 的公共骨架（.page-head / .page-title /
+         .page-title-wrap / .page-meta），卡片用 .panel，控件全部走 Element Plus 默认样式
+         （EP 主题已在 index.css 里映射到项目令牌，所以天然同色同圆角）。
+         旧的「左栏 hero + 浮动卡片 + 自造复选框 + 按钮光效」整套已删。 -->
+    <div class="login">
+        <div class="page-head">
+            <div class="page-title-wrap">
+                <h2 class="page-title">
+                    <span class="logo-dot"></span>{{ activeTab === 'login' ? '门禁' : '注册' }}
+                </h2>
+                <span class="logo-en">{{ activeTab === 'login' ? 'Sign in' : 'Sign up' }}</span>
             </div>
+            <div class="page-meta">共 {{ total }} 条线路 · {{ adcodeCount }} 个城市</div>
+        </div>
 
-            <!-- Floating book cards -->
-            <div class="book-cards">
-                <div class="book-card">
-                    <div class="bc-title">线路数据查看</div>
-                    <div class="bc-author">list data</div>
-                    <div class="bc-bar">
-                        <div class="bc-fill" style="width:94%"></div>
-                    </div>
+        <div class="panel login-panel">
+            <div class="login-hint">嘻嘻，看看就行，别动我数据。</div>
+
+            <!-- 登录 -->
+            <template v-if="activeTab === 'login'">
+                <div class="field-group">
+                    <div class="field-label">账号 / 邮箱</div>
+                    <el-input v-model="loginForm.userName" placeholder="请输入账号或邮箱" @keyup.enter="doLogin" />
+                    <div v-if="errors.userName" class="field-error">{{ errors.userName }}</div>
                 </div>
-                <div class="book-card">
-                    <div class="bc-title">线路管理</div>
-                    <div class="bc-author">manage data</div>
-                    <div class="bc-bar">
-                        <div class="bc-fill" style="width:78%"></div>
-                    </div>
+
+                <div class="field-group">
+                    <div class="field-label">密码</div>
+                    <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" show-password
+                        @keyup.enter="doLogin" />
+                    <div v-if="errors.password" class="field-error">{{ errors.password }}</div>
                 </div>
-                <div class="book-card">
-                    <div class="bc-title">线路获取</div>
-                    <div class="bc-author">get data from API</div>
-                    <div class="bc-bar">
-                        <div class="bc-fill" style="width:62%"></div>
-                    </div>
+
+                <div class="remember-row">
+                    <el-checkbox v-model="remember">记住我</el-checkbox>
                 </div>
+
+                <el-button class="submit-btn" type="primary" :loading="loading" @click="doLogin">
+                    {{ loading ? '登录中…' : '登 录' }}
+                </el-button>
+            </template>
+
+            <!-- 注册 -->
+            <template v-else>
+                <div class="field-group">
+                    <div class="field-label">用户名</div>
+                    <el-input v-model="regForm.userName" placeholder="请输入用户名" />
+                    <div v-if="errors.userName" class="field-error">{{ errors.userName }}</div>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">昵称</div>
+                    <el-input v-model="regForm.nickname" placeholder="起一个好听的名字" />
+                    <div v-if="errors.nickname" class="field-error">{{ errors.nickname }}</div>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">邮箱</div>
+                    <el-input v-model="regForm.email" placeholder="请输入邮箱地址" />
+                    <div v-if="errors.email" class="field-error">{{ errors.email }}</div>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">密码</div>
+                    <el-input v-model="regForm.password" type="password" placeholder="至少 8 位，含字母和数字"
+                        show-password />
+                    <div v-if="errors.regPwd" class="field-error">{{ errors.regPwd }}</div>
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label">确认密码</div>
+                    <el-input v-model="regForm.confirm" type="password" placeholder="再次输入密码" show-password
+                        @keyup.enter="doRegister" />
+                    <div v-if="errors.confirm" class="field-error">{{ errors.confirm }}</div>
+                </div>
+
+                <el-button class="submit-btn" type="primary" :loading="loading" @click="doRegister">
+                    {{ loading ? '注册中…' : '创建账号' }}
+                </el-button>
+            </template>
+
+            <div class="login-foot">
+                <span>{{ activeTab === 'login' ? '还没有账号？' : '已有账号？' }}</span>
+                <!-- <a @click="switchTab(activeTab === 'login' ? 'register' : 'login')">
+                    {{ activeTab === 'login' ? '立即注册' : '去登录' }}
+                </a> -->
+                <a>
+                    不给注册
+                </a>
             </div>
         </div>
 
-        <!-- RIGHT PANEL: FORM -->
-        <div class="bg-right">
-            <div class="form-card">
-                <div class="form-header">
-                    <div class="form-greeting">SIGN IN</div>
-                    <div class="form-title">{{ activeTab === 'login' ? '门禁' : '不给注册捏' }}</div>
-                    <div class="form-sub">{{ activeTab === 'login' ? '门禁' : '嘻嘻' }}</div>
-                </div>
-
-                <!-- Tabs -->
-                <div class="form-tabs">
-                    <div class="form-tab" :class="{ active: activeTab === 'login' }" @click="switchTab('login')">登录
-                    </div>
-                </div>
-                <div class="form-tab" :class="{ active: activeTab === 'register' }" @click="switchTab('register')">
-                    注册
-                </div>
-
-                <!-- LOGIN FORM -->
-                <transition name="tab-fade" mode="out-in">
-                    <div v-if="activeTab === 'login'" key="login">
-                        <div class="field-group">
-                            <div class="field-label">账号 / 邮箱</div>
-                            <el-input v-model="loginForm.userName" placeholder="请输入账号或邮箱" :prefix-icon="userIcon"
-                                @keyup.enter="doLogin" />
-                            <div class="field-error" v-if="errors.userName">⚠ {{ errors.userName }}</div>
-                        </div>
-                        <div class="field-group">
-                            <!-- <div class="field-label">
-                                <span>密码</span>
-                                <span class="field-forgot">忘记密码？</span>
-                            </div> -->
-                            <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" show-password
-                                @keyup.enter="doLogin" />
-                            <div class="field-error" v-if="errors.password">⚠ {{ errors.password }}</div>
-                        </div>
-                        <div class="remember-row">
-                            <div class="remember-check" @click="remember = !remember">
-                                <div class="check-box" :class="{ checked: remember }">{{ remember ? '✓' : '' }}</div>
-                                <span>记住我</span>
-                            </div>
-                        </div>
-                        <button class="submit-btn" @click="doLogin" :disabled="loading">
-                            <div class="btn-shine"></div>
-                            <div class="spin" v-if="loading"></div>
-                            <span>{{ loading ? '登录中…' : '登 录' }}</span>
-                        </button>
-
-                        <!-- <div class="or-divider">或使用以下方式登录</div>
-                        <div class="social-row">
-                            <button class="social-btn">🌐 微信登录</button>
-                            <button class="social-btn">📱 手机号登录</button>
-                        </div> -->
-                    </div>
-
-                    <!-- REGISTER FORM -->
-                    <div v-else key="register">
-                        <div class="field-group">
-                            <div class="field-label">用户名</div>
-                            <el-input v-model="regForm.userName" placeholder="请输入用户名" :prefix-icon="userIcon" />
-                            <div class="field-error" v-if="errors.userName">⚠ {{ errors.userName }}</div>
-                        </div>
-                        <div class="field-group">
-                            <div class="field-label">昵称</div>
-                            <el-input v-model="regForm.nickname" placeholder="起一个好听的名字" />
-                            <div class="field-error" v-if="errors.nickname">⚠ {{ errors.nickname }}</div>
-                        </div>
-                        <div class="field-group">
-                            <div class="field-label">邮箱</div>
-                            <el-input v-model="regForm.email" placeholder="请输入邮箱地址" />
-                            <div class="field-error" v-if="errors.email">⚠ {{ errors.email }}</div>
-                        </div>
-                        <div class="field-group">
-                            <div class="field-label">密码</div>
-                            <el-input v-model="regForm.password" type="password" placeholder="至少 8 位，含字母和数字"
-                                show-password />
-                            <div class="field-error" v-if="errors.regPwd">⚠ {{ errors.regPwd }}</div>
-                        </div>
-                        <div class="field-group" style="margin-bottom:24px">
-                            <div class="field-label">确认密码</div>
-                            <el-input v-model="regForm.confirm" type="password" placeholder="再次输入密码" show-password
-                                @keyup.enter="doRegister" />
-                            <div class="field-error" v-if="errors.confirm">⚠ {{ errors.confirm }}</div>
-                        </div>
-                        <button class="submit-btn" @click="doRegister" :disabled="loading">
-                            <div class="btn-shine"></div>
-                            <div class="spin" v-if="loading"></div>
-                            <span>{{ loading ? '注册中…' : '创建账号' }}</span>
-                        </button>
-                    </div>
-                </transition>
-
-                <div class="form-footer">
-                    {{ activeTab === 'login' ? '还没有账号？' : '已有账号？' }}
-                    <a @click="switchTab(activeTab === 'login' ? 'register' : 'login')">
-                        {{ activeTab === 'login' ? '立即注册' : '去登录' }}
-                    </a>
-                </div>
+        <div class="stats">
+            <div class="stat">
+                <b>{{ total }}</b>
+                <span>收录公交线路</span>
+            </div>
+            <div class="stat">
+                <b>{{ adcodeCount }}</b>
+                <span>收录城市</span>
+            </div>
+            <div class="stat">
+                <b>每日</b>
+                <span>实时更新</span>
             </div>
         </div>
+
+        <div class="login-quote">“不是我说凭什么有地铁轨道交通线路图没有公交交通线路图，看不起我们公交车是吧。”</div>
     </div>
 </template>
+
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 import { useRouter } from 'vue-router';
@@ -191,8 +129,6 @@ const loginForm = reactive({ userName: '', password: '' });
 const regForm = reactive({ nickname: '', email: '', password: '', confirm: '', userName: '' });
 const errors: { [x: string]: any } = reactive({});
 
-const userIcon = { render: () => h('span', { style: 'font-size:14px;color:var(--ink-faint)' }, '👤') };
-
 const switchTab = (tab: any) => {
     activeTab.value = tab;
     Object.keys(errors).forEach((k: string) => delete errors[k]);
@@ -210,15 +146,14 @@ const doLogin = async () => {
         method: 'POST',
         body: { userName: loginForm.userName, password: loginForm.password }
     })
-    if(res.code == 200){
-        // token存cookie
-        // 查用户信息接口
+    if (res.code == 200) {
+        // token 存 cookie，再查一次用户信息
         authStore.login(res.data.token)
         authStore.setUserInfo(res.data.user)
         ElMessage({ message: '登录成功，正在跳转…', type: 'success', duration: 1200 });
         router.push({ path: '/' })
     } else {
-        ElMessage({ message: `登录失败捏！${ res.msg }`, type: 'error', duration: 1500 });
+        ElMessage({ message: `登录失败捏！${res.msg}`, type: 'error', duration: 1500 });
     }
     loading.value = false;
 };
@@ -234,7 +169,7 @@ const doRegister = async () => {
     if (!ok) return;
 
     loading.value = true;
-    
+
     const res: any = await request('/api/user/register', {
         method: 'POST',
         body: {
@@ -244,7 +179,7 @@ const doRegister = async () => {
             nickname: regForm.nickname
         }
     })
-    if(res.code == 200){
+    if (res.code == 200) {
         ElMessage({ message: '注册成功捏！', type: 'success', duration: 1500 });
         switchTab('login');
         loginForm.userName = regForm.userName;
@@ -252,14 +187,11 @@ const doRegister = async () => {
         ElMessage({ message: '现在不允许注册捏！', type: 'error', duration: 1500 });
     }
     loading.value = false;
-
-
-    // setTimeout(() => {
-    // }, 1600);
 };
+
 const setNum = async () => {
     const numRes: any = await request('/api/buslines/getIndexNum', { method: 'GET' })
-    if(numRes.code == 200){
+    if (numRes.code == 200) {
         total.value = numRes.data.total
         adcodeCount.value = numRes.data.adcodeCount
     }

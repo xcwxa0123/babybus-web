@@ -70,6 +70,22 @@ body::after {
     z-index: 1;
 }
 
+/* ── 页面外壳（layouts/default.vue）──
+   目的：内容不满一屏时，页脚贴住视口底部；内容超过一屏时，页脚照旧跟在内容后面。
+   body 上的 min-height: 100vh 只撑高 body 自己的盒子，不会拉伸它的子元素，
+   所以外壳必须自己做 flex 列容器，由 main 吃掉剩余空间。
+   （页脚在普通文档流里时，位置恒等于内容高度——内容短时它就会停在半空、下方留白。） */
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* flex-shrink 保持 0：内容超长时不许被压缩，让文档正常滚动 */
+.app-shell > main {
+    flex: 1 0 auto;
+}
+
 /* ── 顶栏（AppHeader） ── */
 header {
     position: sticky;
@@ -205,6 +221,7 @@ footer {
 .buslines,
 .markdone,
 .districts,
+.login,
 .app-dialog,
 .el-message-box,
 .bl-popper {
@@ -421,7 +438,8 @@ footer {
 
 /* ── 页面标题 ── */
 .buslines .page-head,
-.markdone .page-head {
+.markdone .page-head,
+.login .page-head {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
@@ -431,14 +449,16 @@ footer {
 }
 
 .buslines .page-title-wrap,
-.markdone .page-title-wrap {
+.markdone .page-title-wrap,
+.login .page-title-wrap {
     display: flex;
     align-items: baseline;
     gap: 12px;
 }
 
 .buslines .page-title,
-.markdone .page-title {
+.markdone .page-title,
+.login .page-title {
     font-family: 'Noto Serif SC', serif;
     font-size: 26px;
     font-weight: 700;
@@ -447,12 +467,14 @@ footer {
 }
 
 .buslines .page-title .logo-dot,
-.markdone .page-title .logo-dot {
+.markdone .page-title .logo-dot,
+.login .page-title .logo-dot {
     margin-right: 10px;
 }
 
 .buslines .page-meta,
-.markdone .page-meta {
+.markdone .page-meta,
+.login .page-meta {
     font-size: 13px;
     letter-spacing: 1px;
     color: var(--ink-light);
@@ -460,7 +482,8 @@ footer {
 
 /* ── 通用面板 ── */
 .buslines .panel,
-.markdone .panel {
+.markdone .panel,
+.login .panel {
     background: var(--paper);
     border: 1px solid rgba(180, 160, 120, 0.14);
     border-radius: 14px;

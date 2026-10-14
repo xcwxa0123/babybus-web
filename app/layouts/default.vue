@@ -1,8 +1,12 @@
 <template>
-    <div>
+    <!-- app-shell：flex 列外壳，配合 index.css 让页脚在内容不满一屏时贴住视口底部。
+         main 是必须的——剩余空间由它吃掉，直接给 <slot /> 没法加样式。 -->
+    <div class="app-shell">
         <AppHeader />
 
-        <slot />
+        <main>
+            <slot />
+        </main>
 
         <AppFoot />
     </div>
