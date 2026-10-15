@@ -67,7 +67,7 @@ void main() {
 const FRAG_CURTAIN = `
 precision highp float;
 varying vec2 vUv;
-uniform float uP;        // 拉开进度 0~1（1.5 = 完全不遮）
+uniform float uP;        // 拉开进度 0~1.02（终点越过边界，1.011 以上即完全不遮）
 uniform vec2 uA;
 uniform float uB;
 uniform vec3 uCloth;     // 幕布色（比页面背景深一点）
@@ -411,15 +411,16 @@ function loop(now: number) {
 		elapsed += dt
 		const dur = Math.max(0.3, props.duration)
 		const p = Math.min(1, elapsed / dur)
-		curtainP = 1 - Math.pow(1 - p, 2.2)
+		// 终点直接推到 1.02（边界外）：布边自带 fbm 抖动 ±0.011，如果进度停在 1，
+		// 抖回来的那半圈会在收尾的角落留一条 14px 的残布，挂满整个落块阶段才消失。
+		// 1.02 保证 edge ≥ 1.009 > q_max = 1，揭开即干净；布边约在 83% 时长处出屏。
+		curtainP = 1.02 * (1 - Math.pow(1 - p, 2.2))
 
 		if (elapsed < dur) phase = 'curtain'
 		else if (elapsed < dur + 5.0) phase = 'falling'
 		else {
 			phase = 'done'
 			running = false
-			// 1.5：布边有噪声抖动，1.0 会在最后一个角留一条残布
-			curtainP = 1.5
 		}
 	}
 
@@ -478,12 +479,13 @@ function buildParticles() {
 		]
 	}
 	// 出生时刻要跟着"缓出后的"布边，而不是线性时刻——否则粒子带会明显落后于布边
-	//（幕布进度是 1-(1-p)^2.2，所以反解出 p = 1 - (1-q)^(1/2.2)）。
+	//（幕布进度是 1.02·(1-(1-p)^2.2)，所以反解出 p = 1 - (1-q/1.02)^(1/2.2)；
+	//  除以 1.02 是因为布边在 83% 时长处就已扫出屏幕，最晚的粒子得赶在那之前出生）。
 	const EASE_K = 2.2
 	for (let i = 0; i < n; i++) {
 		const qi = rnd()
 		const [sx, sy] = spawnAtQ(qi, 0.05) as [number, number]
-		const birth = dur * (1 - Math.pow(1 - qi, 1 / EASE_K)) * 0.98
+		const birth = dur * (1 - Math.pow(1 - qi / 1.02, 1 / EASE_K)) * 0.98
 		put(i, sx, sy, rnd(), base * (0.55 + rnd() * 0.95),
 			(rnd() - 0.5) * 60, 30 + rnd() * 120,
 			birth, 5.0 + rnd() * 3.0,
