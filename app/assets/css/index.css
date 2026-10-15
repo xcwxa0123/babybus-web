@@ -1,17 +1,27 @@
 /* ═══════════ 全局公共样式（所有页面共用） ═══════════ */
 
 :root {
+    /* ── 世界观：深色舞台。登录页（幕后）→ 内容页（舞台，灯光与金尘）→ 卡片（亮纸）──
+        深底上的散字用 --on-stage 系；卡片内的文字仍用 --ink 系（亮纸没变） */
     --cream: #faf7f2;
     --cream-dark: #f3ede2;
-    --paper: #fffef9;
+    --stage: #2e2820;                        /* 内容页底色：深暖棕舞台 */
+    --curtain: #3a3226;                      /* 幕布布面深色档（InkCurtain 的 WebGL 布面读这两个） */
+    --curtain-2: #4a4133;
+    --paper: rgba(255, 254, 249, 0.88);      /* 亮纸卡片：深底上要实一些才浮得起来 */
+    --on-stage: #ece4d4;                     /* 深底上的主文字 */
+    --on-stage-mid: rgba(236, 228, 212, 0.62);
+    --on-stage-faint: rgba(236, 228, 212, 0.38);
     --sky: #daeaf7;
     --sky-mid: #b8d6f0;
     --sky-accent: #4a90c4;
+    --sky-bright: #7db4dd;                   /* 深底上的强调蓝（--sky-accent 在暗处偏闷） */
     --ink: #2c2416;
     --ink-mid: #5a4e3c;
     --ink-light: #9a8e7d;
     --ink-faint: #cac0b0;
     --rose-accent: #b86060;
+    --surface-blur: blur(10px) saturate(1.08);
     --shadow-sm: 0 2px 12px rgba(100, 80, 40, 0.06);
     --shadow-md: 0 6px 28px rgba(100, 80, 40, 0.09);
     --shadow-lg: 0 16px 48px rgba(100, 80, 40, 0.12);
@@ -29,30 +39,30 @@ html {
 
 body {
     font-family: 'Noto Sans SC', sans-serif;
-    background: var(--cream);
+    background: var(--stage);
     color: var(--ink);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
 }
 
-/* 背景纹理：窗光——从左上斜射进来的一束暖日光（和登录页侧光同一个方向叙事，
-   "穿过幕布之后，纸面上是有光的"），右下角留一点更深的桌面影。
-   之前是三团对称的彩色 radial，均匀得像网页渐变——纸面有了光照方向才像"纸"。 */
+/* 背景纹理：环境层。深底上 multiply 的 grain 不可见 ⇒ 只保留极淡的顶亮底暗，
+   主体照明（光束、金尘、光晕）全部由 WebGL（PaperDust）负责 */
 body::before {
     content: '';
     position: fixed;
     inset: 0;
     z-index: 0;
     background-image:
-        linear-gradient(155deg, rgba(255, 252, 240, 0.55) 0%, rgba(250, 246, 236, 0) 46%),
-        radial-gradient(ellipse 90% 70% at 8% -6%, rgba(255, 244, 214, 0.35) 0%, transparent 60%),
-        radial-gradient(ellipse 80% 60% at 98% 110%, rgba(96, 78, 52, 0.10) 0%, transparent 60%);
+        linear-gradient(180deg, rgba(255, 240, 205, 0.05) 0%, rgba(46, 40, 32, 0) 35%,
+                        rgba(0, 0, 0, 0.16) 100%);
     pointer-events: none;
 }
 
 /* 纸面颗粒（grain）：极淡噪点铺满全屏、压在内容之上，像纸张/印刷的纤维颗粒。
    用 SVG feTurbulence 生成可无缝平铺的噪声（stitchTiles=stitch 保证接缝不露）。
    它是「材质」不是「图案」——不成形、不产生结构，所以不会和表格、发丝线抢视线。
+   feColorMatrix 把灰度噪声染成暖棕（R 保持、G×0.88、B×0.66）——
+   灰度 + multiply 在纸面上是灰黑色颗粒，一眼"脏"；染暖之后才是"纸的纤维"。
    想更明显/更淡，只调 opacity 即可。 */
 body::after {
     content: '';
@@ -60,9 +70,9 @@ body::after {
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.08;
+    opacity: 0.04;
     mix-blend-mode: multiply;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='1 0 0 0 0 0 0.88 0 0 0 0 0 0.66 0 0 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
     background-size: 160px 160px;
     background-repeat: repeat;
 }
@@ -70,6 +80,15 @@ body::after {
 #app {
     position: relative;
     z-index: 1;
+}
+
+/* ── 毛玻璃表面：凡 var(--paper) 的卡片（已改半透明）统一加背板模糊，
+   光束/金尘从卡片后面经过时会透成柔光斑——光效和 DOM 的自动联动 ── */
+.panel,
+.welcome-band,
+.module-card {
+    backdrop-filter: var(--surface-blur);
+    -webkit-backdrop-filter: var(--surface-blur);
 }
 
 /* ── 页面外壳（layouts/default.vue）──
@@ -93,19 +112,14 @@ header {
     position: sticky;
     top: 0;
     z-index: 200;
-    background: rgba(250, 247, 242, 0.88);
-    backdrop-filter: blur(20px) saturate(1.2);
-    border-bottom: 1px solid rgba(180, 160, 120, 0.12);
+    /* 全透明：header 融进舞台，logo/徽章靠"浅字 + 细描边"从背景里描出来。
+       滚动时内容会从 logo 底下穿过 ⇒ 用一段顶部渐隐的深色渐变兜可读性（无硬边） */
+    background: linear-gradient(180deg, rgba(30, 26, 18, 0.82) 0%, rgba(30, 26, 18, 0) 100%);
     padding: 0 40px;
     height: 7.9vh;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    transition: box-shadow 0.3s;
-}
-
-header.scrolled {
-    box-shadow: var(--shadow-sm);
 }
 
 .logo-area {
@@ -179,8 +193,7 @@ nav {
 
 /* ── 页脚（AppFoot） ──
    分隔职能已交给上方的撕布边（AppFoot 里的 fbm 装饰线），不再要 border-top；
-   背景也必须透明——footer 若自带一层半透明白，会和撕布边下方透出的页面色
-   （--cream + 窗光 + grain）对不上，底部凭空多出一条横向色差 */
+   背景必须透明——footer 自带底色会在深底上拼出一条横向色差 */
 footer {
     background: transparent;
     padding: 15px 40px;
@@ -198,13 +211,13 @@ footer {
     font-size: 16px;
     font-weight: 700;
     letter-spacing: 3px;
-    color: var(--ink-light);
+    color: var(--on-stage);
     margin-bottom: 10px;
 }
 
 .footer-sub {
     font-size: 12px;
-    color: var(--ink-faint);
+    color: var(--on-stage-mid);
     letter-spacing: 1px;
 }
 
@@ -467,7 +480,7 @@ footer {
     font-size: 26px;
     font-weight: 700;
     letter-spacing: 3px;
-    color: var(--ink);
+    color: var(--on-stage);
 }
 
 .buslines .page-title .logo-dot,
@@ -481,7 +494,7 @@ footer {
 .login .page-meta {
     font-size: 13px;
     letter-spacing: 1px;
-    color: var(--ink-light);
+    color: var(--on-stage-mid);
 }
 
 /* ── 通用面板 ── */

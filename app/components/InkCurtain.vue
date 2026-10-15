@@ -287,8 +287,10 @@ function readColors() {
 		return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255]
 	}
 	return {
-		cloth: pick('--cream-dark', '#f3ede2'),
-		cloth2: pick('--cream', '#faf7f2'),
+		// 深色世界的幕布：布面用深暖棕（--curtain 系），粒子仍是白/亮——
+		// 深布上白粒子更醒目，转场时也不会在深色 veil 和亮布面之间闪变
+		cloth: pick('--curtain', '#3a3226'),
+		cloth2: pick('--curtain-2', '#4a4133'),
 		glass: pick('--paper', '#fffef9'),
 		hi: [1, 1, 1],
 	}

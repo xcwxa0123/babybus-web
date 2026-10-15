@@ -6,17 +6,16 @@
 	<div class="foot-hem" aria-hidden="true">
 		<svg class="hem-svg" viewBox="0 0 1440 48" preserveAspectRatio="none">
 			<defs>
-				<!-- 布带用垂直渐变而不是实色：顶部渐入（没有硬切线）、越靠撕边越深，
-				     下面的页面底色（--cream + 窗光 + grain）整个透过来——
-				     实色贴片不吃页面光照，贴上去就是一块色板，两侧全是割裂 -->
+				<!-- 深色舞台上的撕布边 = "被脚灯照亮的下缘"：顶部融入深底，
+				     越靠撕边越亮（脚灯从下往上打光），亮布色 + 亮描边 -->
 				<linearGradient id="hem-grad" x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" stop-color="rgba(226, 214, 194, 0)" />
-					<stop offset="0.5" stop-color="rgba(226, 214, 194, 0.5)" />
-					<stop offset="1" stop-color="rgba(226, 214, 194, 0.68)" />
+					<stop offset="0" stop-color="rgba(243, 237, 226, 0)" />
+					<stop offset="0.55" stop-color="rgba(243, 237, 226, 0.14)" />
+					<stop offset="1" stop-color="rgba(243, 237, 226, 0.30)" />
 				</linearGradient>
 			</defs>
 			<path :d="hemFill" fill="url(#hem-grad)" />
-			<path :d="hemLine" fill="none" stroke="rgba(122, 100, 62, 0.20)" stroke-width="1" />
+			<path :d="hemLine" fill="none" stroke="rgba(255, 240, 210, 0.30)" stroke-width="1" />
 		</svg>
 		<!-- <span class="hem-note">从这条布边底下穿过来</span> -->
 	</div>
@@ -91,6 +90,6 @@ const hemLine = computed(() => hemPoints())
 	bottom: 3px;
 	font-size: 9px;
 	letter-spacing: 3px;
-	color: rgba(90, 78, 60, 0.36);
+	color: var(--on-stage-faint);
 }
 </style>

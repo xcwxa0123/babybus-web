@@ -40,8 +40,9 @@ watch(covering, (v) => {
 	   盖着的时候页面在幕后换页，点得到也白点，不如挡住。
 	   也一并压过 Element Plus 的 loading 蒙层（2000+），盖幕期间不许它透出来。 */
 	z-index: 3999;
-	/* 和幕布同一个底色（--cream-dark），WebGL 接管前后看不出换了层 */
-	background: var(--cream-dark, #f3ede2);
+	/* 深色世界里的幕布本体：和内容页底色（--stage）同族——
+	   亮色 veil 是浅底时代的产物，深舞台上盖一块亮板会闪瞎 */
+	background: #2b251d;
 	/* 兜底的兜底：JS 永远没起来（水合失败）也不能把用户永远关在幕后，到点自己淡出 */
 	animation: curtain-veil-exit 0.6s ease 3.5s forwards;
 }

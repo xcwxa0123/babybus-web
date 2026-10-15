@@ -64,6 +64,8 @@
     font-size: 26px;
     font-weight: 700;
     letter-spacing: 2px;
+    /* welcome-band 是卡片（--paper 亮纸），卡内文字用 --ink 系；
+       --on-stage 系只给"深底上的散字"（sec-header、页脚等） */
     color: var(--ink);
 }
 
@@ -110,7 +112,7 @@
     font-size: 10px;
     font-weight: 500;
     letter-spacing: 3px;
-    color: var(--sky-accent);
+    color: var(--sky-bright);
 }
 
 .dashboard .sec-title {
@@ -118,7 +120,7 @@
     font-size: 19px;
     font-weight: 700;
     letter-spacing: 2px;
-    color: var(--ink);
+    color: var(--on-stage);
 }
 
 /* ── 模块网格 ── */

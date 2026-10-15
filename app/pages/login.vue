@@ -4,7 +4,7 @@
 	     登录成功：卡片盖章 + 背景光脉冲 → 盖幕揭工作台（Gate 自动处理转场）。
 	     已登录访问此页会被守卫直接送回 /（不盖幕）。 -->
 	<div class="login-page">
-		<LoginBackdrop ref="backdropRef" />
+		<InkAtmosphere ref="backdropRef" />
 
 		<div class="login-stage">
 			<!-- 左：品牌语 -->
@@ -155,7 +155,8 @@ onMounted(setNum)
 	font-size: clamp(44px, 6vw, 74px);
 	font-weight: 700;
 	letter-spacing: 0.16em;
-	color: var(--paper, #fffef9);
+	/* 固定色：全局 --paper 已改成半透明（内容页毛玻璃用），品牌大字不能跟着变淡 */
+	color: #fffef9;
 	text-shadow: 0 4px 40px rgba(20, 12, 0, 0.35);
 	white-space: nowrap;
 }
@@ -178,7 +179,7 @@ onMounted(setNum)
 	font-family: 'Playfair Display', serif;
 	font-size: 26px;
 	line-height: 1.2;
-	color: var(--paper, #fffef9);
+	color: #fffef9;
 	font-variant-numeric: tabular-nums;
 }
 
