@@ -3,6 +3,10 @@
 // 方向按层级粗判：去更深的页面从左拉开（幕布向右退去），退回上层从右拉开。
 
 export default defineNuxtRouteMiddleware((to, from) => {
+	// 已登录还来 /login：直接送回工作台，且不盖幕（盖住再弹回很傻）
+	if (to.path === '/login' && useCookie('token').value) {
+		return navigateTo('/', { replace: true })
+	}
 	if (from && to.path === from.path) return      // 同页的 query/参数变化：不重新盖幕
 	const depth = (p?: string) => (p ?? '').replace(/\/+$/, '').split('/').filter(Boolean).length
 	const goingUp = !!from && depth(to.path) < depth(from.path)

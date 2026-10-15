@@ -35,16 +35,18 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* 背景纹理 */
+/* 背景纹理：窗光——从左上斜射进来的一束暖日光（和登录页侧光同一个方向叙事，
+   "穿过幕布之后，纸面上是有光的"），右下角留一点更深的桌面影。
+   之前是三团对称的彩色 radial，均匀得像网页渐变——纸面有了光照方向才像"纸"。 */
 body::before {
     content: '';
     position: fixed;
     inset: 0;
     z-index: 0;
     background-image:
-        radial-gradient(ellipse 80% 60% at 10% 0%, rgba(180, 215, 245, 0.25) 0%, transparent 55%),
-        radial-gradient(ellipse 60% 50% at 90% 100%, rgba(232, 220, 200, 0.3) 0%, transparent 55%),
-        radial-gradient(ellipse 40% 40% at 50% 50%, rgba(255, 255, 248, 0.4) 0%, transparent 70%);
+        linear-gradient(155deg, rgba(255, 252, 240, 0.55) 0%, rgba(250, 246, 236, 0) 46%),
+        radial-gradient(ellipse 90% 70% at 8% -6%, rgba(255, 244, 214, 0.35) 0%, transparent 60%),
+        radial-gradient(ellipse 80% 60% at 98% 110%, rgba(96, 78, 52, 0.10) 0%, transparent 60%);
     pointer-events: none;
 }
 
@@ -175,10 +177,12 @@ nav {
     margin: 0 0 40px;
 }
 
-/* ── 页脚（AppFoot） ── */
+/* ── 页脚（AppFoot） ──
+   分隔职能已交给上方的撕布边（AppFoot 里的 fbm 装饰线），不再要 border-top；
+   背景也必须透明——footer 若自带一层半透明白，会和撕布边下方透出的页面色
+   （--cream + 窗光 + grain）对不上，底部凭空多出一条横向色差 */
 footer {
-    background: rgba(255, 255, 250, 0.7);
-    border-top: 1px solid rgba(180, 160, 120, 0.1);
+    background: transparent;
     padding: 15px 40px;
     text-align: center;
     height: 8vh;
