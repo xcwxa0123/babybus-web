@@ -41,14 +41,14 @@ const props = withDefaults(defineProps<{
 }>(), {
 	autoPlay: true,
 	dir: 'random',
-	duration: 1.7,
-	count: 1100,
-	size: 16,
-	gravity: 620,
-	restitution: 0.55,
+	duration: 0.6,
+	count: 2000,
+	size: 4,
+	gravity: 1200,
+	restitution: 0.3,
 	restiDecay: 1,
 	bounceCount: 3,
-	opacity: 1,
+	opacity: 0.45,
 	paused: false,
 })
 
