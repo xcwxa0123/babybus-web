@@ -526,6 +526,60 @@ footer {
     border-radius: 12px;
 }
 
+/* ── 舞台调度：Gate 揭幕时内容按序入场（元素挂载即播放，SPA 切页自动重播）──
+   delay 对齐揭幕节奏：0.5s 时幕布刚拉开三成，卡片跟着布边浮现。 */
+@keyframes stage-enter {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.panel,
+.welcome-band,
+.module-card {
+    animation: stage-enter 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.5s backwards;
+}
+
+.module-grid .module-card:nth-child(2) { animation-delay: 0.62s; }
+.module-grid .module-card:nth-child(3) { animation-delay: 0.74s; }
+.module-grid .module-card:nth-child(4) { animation-delay: 0.86s; }
+
+/* ── 墨字标题：晕开又聚拢（深底浅字的"墨渗进纸"入场）── */
+@keyframes ink-in {
+    from {
+        opacity: 0;
+        filter: blur(6px);
+        letter-spacing: 10px;
+    }
+    to {
+        opacity: 1;
+        filter: blur(0);
+        letter-spacing: 3px;
+    }
+}
+
+.buslines .page-title,
+.markdone .page-title,
+.login .page-title {
+    animation: ink-in 0.9s ease-out 0.4s backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel,
+    .welcome-band,
+    .module-card,
+    .buslines .page-title,
+    .markdone .page-title,
+    .login .page-title {
+        animation: none;
+    }
+}
+
 /* ── 操作区 ── */
 .buslines .tools,
 .markdone .tools {

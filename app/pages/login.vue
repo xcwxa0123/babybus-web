@@ -128,11 +128,13 @@ onMounted(setNum)
 </script>
 
 <style scoped>
-/* 登录前 = 幕布 backstage：整页深暖色，WebGL 背景负责质感，这里只给 CSS 兜底 */
+/* 登录前 = 幕布 backstage：整页深暖色。
+   背景必须透明：InkAtmosphere 是 z-index:-1（垫在所有流内内容之下），
+   这里若自带不透明渐变，会把 WebGL 布面和尘埃整个挡住（实测踩过）。
+   兜底由 .ink-atmosphere 自己的 CSS 渐变负责，WebGL 起来后画布面。 */
 .login-page {
 	position: relative;
 	min-height: 100vh;
-	background: linear-gradient(180deg, #8d7f68, #635746);
 	overflow: hidden;
 }
 

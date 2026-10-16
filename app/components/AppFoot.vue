@@ -14,8 +14,8 @@
 					<stop offset="1" stop-color="rgba(243, 237, 226, 0.30)" />
 				</linearGradient>
 			</defs>
-			<path :d="hemFill" fill="url(#hem-grad)" />
-			<path :d="hemLine" fill="none" stroke="rgba(255, 240, 210, 0.30)" stroke-width="1" />
+			<path ref="hemFillEl" d="" fill="url(#hem-grad)" />
+			<path ref="hemLineEl" d="" fill="none" stroke="rgba(255, 240, 210, 0.30)" stroke-width="1" />
 		</svg>
 		<!-- <span class="hem-note">从这条布边底下穿过来</span> -->
 	</div>
@@ -29,61 +29,71 @@
 </template>
 
 <script setup lang="ts">
-// 一维 fbm：hash/noise 与幕布 shader 同一套公式（CPU 版）
-function h1(n: number) {
-	const s = Math.sin(n * 127.1) * 43758.5453123
-	return s - Math.floor(s)
-}
-function noise1(x: number, seed: number) {
-	const i = Math.floor(x)
-	const f = x - i
-	const u = f * f * (3 - 2 * f)
-	return h1(i + seed) * (1 - u) + h1(i + 1 + seed) * u
-}
-
-// 撕布边：低频大起伏 + 高频小抖 + 微锯齿，三层叠加后钳进 [6, 42]。
-// 活布缘：噪声相位随 hemTick 缓慢漂移（每 450ms 换一档）——布缘真的在飘，
-// 而不是一条焊死的装饰线。离散换相位而不是连续时间：重算便宜、视觉够缓。
-const hemTick = ref(0)
-let hemTimer: ReturnType<typeof setInterval> | null = null
-
-function hemY(t: number) {
-	const s = hemTick.value * 0.37
-	let y = 24
-		+ (noise1(t * 7.3, 3.1 + s) - 0.5) * 20
-		+ (noise1(t * 23.0, 7.7 + s) - 0.5) * 9
-		+ (noise1(t * 61.0, 11.3 + s) - 0.5) * 3.5
+// 撕布边波形：解析波形叠加（四层 sin：缓风 + 宽波 + 细波 + 微波，各带自己的
+// 时间速度）。时间直接进 sin 参数 ⇒ 数学上连续，永不跳变——
+// 之前两版"活布缘"都用噪声查表 + seed/相位漂移，h1 的 sin/fract 对 seed 混沌敏感，
+// 漂移等于每帧重掷骰子，怎么调都是高速抖动。解析波形是唯一正解。
+function hemY(x01: number, t: number) {
+	const x = (x01 - 0.5) * 2          // [-1, 1]，频率按全宽布缘归一
+	const tt = t * 0.55                // 布缘比"风中的光线"更缓
+	const slowWind = Math.sin(x * 3.4 - tt * 0.34)
+	const broadWave = Math.sin(x * 7.2 - tt * 0.52 + 0.35 * Math.sin(x * 1.7 + tt * 0.16))
+	const fineWave = Math.sin(x * 16.0 - tt * 0.78 + 0.55 * Math.sin(x * 4.0 - tt * 0.23))
+	const tinyWave = Math.sin(x * 27.0 - tt * 0.93 + Math.sin(x * 6.0 + tt * 0.18))
+	const y = 24
+		+ slowWind * 7.4
+		+ broadWave * 3.9
+		+ fineWave * 1.2
+		+ tinyWave * 0.4
 	return Math.max(6, Math.min(42, y))
 }
-
-onMounted(() => {
-	// 尊重减弱动效：布缘保持静止
-	if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
-	hemTimer = setInterval(() => { hemTick.value++ }, 450)
-})
-
-onBeforeUnmount(() => {
-	if (hemTimer) clearInterval(hemTimer)
-	hemTimer = null
-})
 
 const HEM_N = 96
 const HEM_W = 1440
 const HEM_H = 48
 
-function hemPoints() {
+function hemPoints(t: number) {
 	const pts: string[] = []
 	for (let i = 0; i <= HEM_N; i++) {
 		const x = ((i / HEM_N) * HEM_W).toFixed(1)
-		const y = hemY(i / HEM_N).toFixed(1)
+		const y = hemY(i / HEM_N, t).toFixed(1)
 		pts.push((i === 0 ? 'M' : 'L') + x + ',' + y)
 	}
 	return pts.join(' ') + ' '
 }
 
-// 布色填充到顶部闭合：深半档的幕布色从上垂到撕边线——"幕布的下缘"
-const hemFill = computed(() => hemPoints() + `L${HEM_W},0 L0,0 Z`)
-const hemLine = computed(() => hemPoints())
+// rAF 每帧重算 path 并直写 DOM（96 点 × 4 层 sin，成本可忽略，绕过响应式）。
+// reduced-motion：只画一帧静态。
+const hemFillEl = ref<SVGPathElement | null>(null)
+const hemLineEl = ref<SVGPathElement | null>(null)
+let hemRaf = 0
+let hemLast = 0
+let hemT = 0
+
+function applyHem(t: number) {
+	const d = hemPoints(t)
+	if (hemFillEl.value) hemFillEl.value.setAttribute('d', d + `L${HEM_W},0 L0,0 Z`)
+	if (hemLineEl.value) hemLineEl.value.setAttribute('d', d)
+}
+
+function hemLoop(now: number) {
+	const dt = hemLast ? Math.min(0.05, (now - hemLast) / 1000) : 0
+	hemLast = now
+	hemT += dt
+	applyHem(hemT)
+	hemRaf = requestAnimationFrame(hemLoop)
+}
+
+onMounted(() => {
+	applyHem(0)   // 首帧立即绘制，避免 path 空白一闪
+	if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+	hemRaf = requestAnimationFrame(hemLoop)
+})
+
+onBeforeUnmount(() => {
+	cancelAnimationFrame(hemRaf)
+	hemRaf = 0
+})
 </script>
 
 <style scoped>

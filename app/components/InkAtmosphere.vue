@@ -266,6 +266,8 @@ uniform vec3 uSpot;      // 暖光衬底：x, y（屏幕归一）+ 强度
 uniform vec2 uLamp;      // 鼠标提灯：光源位置（屏幕归一，平滑跟随）
 uniform float uLightsOut; // 熄灯离场 0..1（波前从右往左扫）
 uniform vec3 uTint;      // 时段色温（乘法色调：午后偏金、深夜偏冷）
+uniform sampler2D uClothSim; // 布料位移场：R/G = 归一化平面位移（±1 ≈ ±24px）
+uniform vec2 uBeamDir;   // 舞台灯光的传播方向（每页一个入射角，切页时缓缓摆过去）
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float noise(vec2 p) {
@@ -293,10 +295,19 @@ void main() {
 	vec3 mid  = vec3(0.55, 0.48, 0.38);
 	vec3 lite = vec3(0.78, 0.71, 0.59);
 
+	// 布料位移场：鼠标拨动注入、向邻域扩散回弹（CPU 模拟，每帧烘进纹理）。
+	// 采样位移扭曲布面图案的坐标——"布被拨动时，上面的褶皱和图案跟着扭"；
+	// 位移幅度再给布面一点凸起微亮。
+	vec2 cd = texture2D(uClothSim, vUv).rg;
+	vec2 disp = (cd - 0.5) * 2.0;
+	disp.y = -disp.y;                                    // 纹理 v 向上、屏幕 y 向下
+	vec2 warpP = p + disp * 0.022;
+
 	// 竖向褶皱，缓慢流动：频率比真幕布低、幅度小——背景要"静"
-	float fold = sin(p.x * 16.0 + fbm(p * 2.4 + uTime * 0.02) * 4.5) * 0.5 + 0.5;
+	float fold = sin(warpP.x * 16.0 + fbm(warpP * 2.4 + uTime * 0.02) * 4.5) * 0.5 + 0.5;
 	vec3 col = mix(deep, mid, fold * 0.6);
-	col = mix(col, lite, fbm(p * 1.7 - uTime * 0.01) * 0.18);
+	col = mix(col, lite, fbm(warpP * 1.7 - uTime * 0.01) * 0.18);
+	col *= 1.0 + length(disp) * 0.35;
 
 	// 一束游移的侧光：自己慢慢晃，鼠标横移会轻推它
 	vec2 lightC = vec2(0.32 + uMouse.x * 0.06 + sin(uTime * 0.07) * 0.05,
@@ -314,6 +325,25 @@ void main() {
 	vec2 cardC = vec2(uSpot.x * aspect, uSpot.y);
 	float dc = distance(p * asp, cardC);
 	col += vec3(0.15, 0.12, 0.07) * exp(-dc * dc * 2.6) * uSpot.z;
+
+	// ── 舞台灯：三条锥从页外射下，缓慢摆动——深底上才立得住的体积光 ──
+	// 光源在 uBeamDir 反方向的外侧；锥心随深度线性散开、半宽随深度增长（真锥形），
+	// 远处指数衰减。方向由当前路由的 hash 决定（每页自己的光），切页时缓缓摆过去。
+	vec2 dir = normalize(uBeamDir);
+	vec2 rel = p * asp - vec2(-0.12, -0.10) * asp;
+	float depth = dot(rel, dir);
+	float lat = dot(rel, vec2(-dir.y, dir.x));
+	float beams = 0.0;
+	for (int i = 0; i < 3; i++) {
+		float fi = float(i);
+		float sway = sin(uTime * (0.05 + fi * 0.021) + fi * 2.1);
+		float lc = (fi - 1.0) * 0.40 * depth + sway * depth * 0.22;
+		float halfw = 0.07 + depth * (0.15 + fi * 0.05);
+		float band = exp(-pow((lat - lc) / halfw, 2.0));
+		float fade = smoothstep(-0.05, 0.30, depth) * exp(-depth * 0.55);
+		beams += band * fade * (0.36 - fi * 0.08);
+	}
+	col += vec3(1.0, 0.88, 0.56) * beams * 0.30;
 
 	// 登录成功：暖光环从卡片位置扩散（一闪即逝；stage 不触发）
 	if (uPulse > 0.001) {
@@ -363,9 +393,11 @@ void main() {
 		float nearL = exp(-distance(p * asp, lightC * asp) * 1.1);
 		// 提灯扫过：靠近鼠标灯的尘埃被点亮——其余沉回布面
 		float nearM = exp(-distance(p * asp, uLamp * asp) * 2.2);
+		// 舞台灯的光路：光锥里的金屑最亮——"光路里才看得见灰尘"
+		float nearB = clamp(beams * 2.2, 0.0, 1.0);
 		// 实心点 + 一圈柔光晕："光粒"的体积感
 		float pt = smoothstep(0.085, 0.0, dd) + smoothstep(0.30, 0.0, dd) * 0.22;
-		dust += pt * amp * ((0.18 + nearL * 0.6) + nearM * 0.85) * (0.5 - fi * 0.12);
+		dust += pt * amp * ((0.18 + nearL * 0.6) + nearM * 0.85 + nearB * 0.55) * (0.5 - fi * 0.12);
 	}
 	col += vec3(0.92, 0.86, 0.70) * dust;
 
@@ -408,19 +440,47 @@ const spotBase = { x: 0.72, y: 0.5 }
 let spotI = 1.0
 // 舞台光当前位置（平滑追目标）+ hover 卡片的聚光目标
 const spotCur = { x: 0.72, y: 0.5 }
+// hover 聚光目标：鼠标悬停的卡片中心（光斑缓缓挪过去）。只跟位置、不提亮度——
+// 亮度跳变（0.55→1.0）在横排多卡页面上就是"划过一张亮一张"的闪烁
 const spotFocus = { x: 0.5, y: 0.42, active: false }
+const onOverRef = ref<((e: MouseEvent) => void) | null>(null)   // 聚光监听（unmount 时移除用）
 let lightsOutT = -1      // 熄灯离场进度，-1 = 未触发
 let tintRGB: number[] = [1, 1, 1]
-const onOverRef = ref<((e: MouseEvent) => void) | null>(null)   // 聚光监听（unmount 时移除用）
+
+// ── 布料位移场：SIM_W×SIM_H 格点的平面位移（px），鼠标拨动注入、
+//    向邻域扩散回弹。每帧编码进纹理给 shader 扭曲布面图案。 ──
+const SIM_W = 64
+const SIM_H = 36
+const SIM_AMP = 24       // 位移编码满量程（px）
+// noUncheckedIndexedAccess 下 TypedArray 索引被推成 number | undefined——
+// 网格尺寸构造时定死、索引全是算出来的，交叉类型收回到 number（同 InkSheet/InkCurtain）
+type SimF32 = Float32Array & { [i: number]: number }
+let simDisp: SimF32 = new Float32Array(SIM_W * SIM_H * 2)
+let simNext: SimF32 = new Float32Array(SIM_W * SIM_H * 2)
+let simTex: WebGLTexture | null = null
+const simPix = new Uint8Array(SIM_W * SIM_H * 4)
+const lastMousePx = { x: -1, y: -1 }
+
+const clamp128 = (v: number) => Math.max(0, Math.min(255, Math.round(v * 127.5 + 127.5)))
 let ro: ResizeObserver | null = null
 
-// 每次路由切换（Gate 盖幕→揭开）重播"点灯进场"：尘埃从左到右重新出生
+// 每次路由切换（Gate 盖幕→揭开）重播"点灯进场"：尘埃从左到右重新出生；
+// 同时舞台灯转向新页面的入射角（路径 hash 决定，±20°）——每个页面有自己的光
 const route = useRoute()
+const BEAM_BASE = -0.686                       // 基准：光从左上外射向右下
+function pathAngle(p: string) {
+	let h = 0
+	for (let i = 0; i < p.length; i++) h = (h + p.charCodeAt(i) * (i + 7)) % 1000
+	return BEAM_BASE + (h / 1000 - 0.5) * 0.7
+}
+let beamAngle = pathAngle('/')
+let beamTarget = beamAngle
 watch(() => route.path, () => {
 	revealT = 0
+	beamTarget = pathAngle(route.path)
 })
 
-const UNIFORM_KEYS = ['uRes', 'uTime', 'uMouse', 'uReveal', 'uPulse', 'uSpot', 'uLamp', 'uLightsOut', 'uTint'] as const
+const UNIFORM_KEYS = ['uRes', 'uTime', 'uMouse', 'uReveal', 'uPulse', 'uSpot', 'uLamp', 'uLightsOut', 'uTint', 'uClothSim', 'uBeamDir'] as const
 type Locs<K extends readonly string[]> = Record<K[number], WebGLUniformLocation | null>
 let u = {} as Locs<typeof UNIFORM_KEYS>
 
@@ -447,18 +507,22 @@ function draw() {
 	gl.uniform1f(u.uReveal, revealT)
 	gl.uniform1f(u.uPulse, Math.max(0, pulseT))
 	gl.uniform2f(u.uLamp, mouse.x, mouse.y)
-	// 舞台光：游移基准 + hover 卡片时聚到卡片中心（lerp 平滑，强度提满）——
-	// 毛玻璃卡片上的透光随之游移/聚焦，DOM 与 WebGL 的联动是免费的
+	// 舞台光：hover 卡片时缓缓挪到那张卡片（只动位置、不动亮度）——
+	// 之前 hover 会把强度从 spotI 提满，横排多卡页面上鼠标依次划过 =
+	// 光斑反复"亮一下"，就是闪烁；现在只挪位置，灯是连续滑动的
 	const baseX = spotBase.x + Math.sin(time * 0.043) * 0.05
 	const baseY = spotBase.y + Math.cos(time * 0.031) * 0.04
 	const tX = spotFocus.active ? spotFocus.x : baseX
 	const tY = spotFocus.active ? spotFocus.y : baseY
-	spotCur.x += (tX - spotCur.x) * 0.055
-	spotCur.y += (tY - spotCur.y) * 0.055
-	const si = spotFocus.active ? Math.max(spotI, 1.0) : spotI
-	gl.uniform3f(u.uSpot, spotCur.x, spotCur.y, si)
+	spotCur.x += (tX - spotCur.x) * 0.045
+	spotCur.y += (tY - spotCur.y) * 0.045
+	gl.uniform3f(u.uSpot, spotCur.x, spotCur.y, spotI)
 	gl.uniform1f(u.uLightsOut, Math.max(0, lightsOutT))
 	gl.uniform3fv(u.uTint, tintRGB)
+	gl.uniform2f(u.uBeamDir, Math.cos(beamAngle), Math.sin(beamAngle))
+	gl.activeTexture(gl.TEXTURE0)
+	gl.bindTexture(gl.TEXTURE_2D, simTex)
+	gl.uniform1i(u.uClothSim, 0)
 	gl.bindVertexArray(vao)
 	gl.drawArrays(gl.TRIANGLES, 0, 3)
 }
@@ -474,8 +538,10 @@ function loop(now: number) {
 			if (pulseT > 1) pulseT = -1
 		}
 		if (lightsOutT >= 0 && lightsOutT < 1) lightsOutT = Math.min(1, lightsOutT + dt / 0.9)
+		beamAngle += (beamTarget - beamAngle) * Math.min(1, dt * 1.2)
 		mouse.x += (mouse.tx - mouse.x) * 0.04
 		mouse.y += (mouse.ty - mouse.y) * 0.04
+		if (!reduced) stepCloth(dt)
 		updateKing(dt)
 		resize()
 		draw()
@@ -486,6 +552,74 @@ function loop(now: number) {
 function onMouseMove(e: MouseEvent) {
 	mouse.tx = e.clientX / window.innerWidth
 	mouse.ty = e.clientY / window.innerHeight
+}
+
+// 布料位移场：鼠标拨动注入 → 邻域扩散 → 阻尼回弹 → 编码烘进纹理。
+// 手抚过布，布跟着手走一点、然后波纹散开缓缓平复。
+function stepCloth(dt: number) {
+	const vw = window.innerWidth
+	const vh = window.innerHeight
+	const mx = mouse.tx * vw
+	const my = mouse.ty * vh
+
+	// 拨动注入：光标的移动量按高斯衰减摊给附近格点（"拨"的方向 = 手的方向）
+	if (lastMousePx.x >= 0) {
+		const mdx = mx - lastMousePx.x
+		const mdy = my - lastMousePx.y
+		if (Math.hypot(mdx, mdy) > 0.5) {
+			const R = 90
+			const gx = Math.floor(mouse.tx * SIM_W)
+			const gy = Math.floor(mouse.ty * SIM_H)
+			for (let j = Math.max(0, gy - 4); j <= Math.min(SIM_H - 1, gy + 4); j++) {
+				for (let i = Math.max(0, gx - 5); i <= Math.min(SIM_W - 1, gx + 5); i++) {
+					const cx = (i + 0.5) / SIM_W * vw
+					const cy = (j + 0.5) / SIM_H * vh
+					const d2 = (cx - mx) * (cx - mx) + (cy - my) * (cy - my)
+					const fall = Math.exp(-d2 / (R * R * 0.5))
+					const k = (j * SIM_W + i) * 2
+					simDisp[k] = simDisp[k]! + mdx * fall * 0.2
+					simDisp[k + 1] = simDisp[k + 1]! + mdy * fall * 0.2
+				}
+			}
+		}
+	}
+	lastMousePx.x = mx
+	lastMousePx.y = my
+
+	// 演化：向 4 邻扩散（波传播）+ 阻尼（回弹平复）
+	const damp = 0.962
+	const spread = 0.16
+	for (let j = 0; j < SIM_H; j++) {
+		for (let i = 0; i < SIM_W; i++) {
+			const k = (j * SIM_W + i) * 2
+			const l = (Math.max(0, i - 1) + j * SIM_W) * 2
+			const r = (Math.min(SIM_W - 1, i + 1) + j * SIM_W) * 2
+			const u2 = (i + Math.max(0, j - 1) * SIM_W) * 2
+			const d2 = (i + Math.min(SIM_H - 1, j + 1) * SIM_W) * 2
+			for (let c = 0; c < 2; c++) {
+				const avg = (simDisp[l + c]! + simDisp[r + c]! + simDisp[u2 + c]! + simDisp[d2 + c]!) * 0.25
+				simNext[k + c] = simDisp[k + c]! * damp + (avg - simDisp[k + c]!) * spread
+			}
+		}
+	}
+	simDisp.set(simNext)
+
+	// 编码进纹理（行序翻转对齐纹理 v 向上）并上传
+	for (let j = 0; j < SIM_H; j++) {
+		const jf = SIM_H - 1 - j
+		for (let i = 0; i < SIM_W; i++) {
+			const k = (j * SIM_W + i) * 2
+			const p = (jf * SIM_W + i) * 4
+			simPix[p] = clamp128(simDisp[k]! / SIM_AMP)
+			simPix[p + 1] = clamp128(simDisp[k + 1]! / SIM_AMP)
+			simPix[p + 2] = 128
+			simPix[p + 3] = 255
+		}
+	}
+	if (gl && simTex) {
+		gl.bindTexture(gl.TEXTURE_2D, simTex)
+		gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, SIM_W, SIM_H, gl.RGBA, gl.UNSIGNED_BYTE, simPix)
+	}
 }
 
 onMounted(() => {
@@ -532,6 +666,15 @@ onMounted(() => {
 		spotI = 1.0
 	}
 
+	// 布料位移场纹理（LINEAR 采样，FRAG 里当位移用）
+	simTex = gl.createTexture()
+	gl.bindTexture(gl.TEXTURE_2D, simTex)
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, SIM_W, SIM_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, simPix)
+
 	// 全屏三角形
 	const buf = gl.createBuffer()
 	gl.bindBuffer(gl.ARRAY_BUFFER, buf)
@@ -558,6 +701,7 @@ onMounted(() => {
 		}
 	}
 	window.addEventListener('mouseover', onOver, { passive: true })
+	onOverRef.value = onOver
 	ro = new ResizeObserver(resize)
 	ro.observe(canvas)
 	raf = requestAnimationFrame(loop)

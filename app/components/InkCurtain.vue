@@ -40,19 +40,37 @@ const props = withDefaults(defineProps<{
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
 // ── 着色器：幕布 ──
+// 幕布本体是全屏网格（96×54）：拉开中段，布边附近的布面被"拉扯"——顶点沿
+// 布边法线回缩 + 横向波纹，FRAG 里同位置一道明暗褶皱带。几何位移和明暗叠加，
+// 布褶才是"立体的"。uLift 在拉开中段最大、起手/收尾为 0（全遮帧平静）。
 const VERT_CURTAIN = `
-attribute vec2 position;
+attribute vec2 position;   // [0,1]² 网格参数
+uniform float uLift;       // 布面隆起强度 0..1
+varying vec2 vWarp;        // 位移后的屏幕归一坐标（FRAG 用同一坐标算 q/covered）
 varying vec2 vUv;
+uniform float uP;
+uniform vec2 uA;
+uniform float uB;
 void main() {
-	vUv = position * 0.5 + 0.5;
-	gl_Position = vec4(position, 0.0, 1.0);
+	vec2 uv = position;
+	vec2 p = vec2(uv.x, 1.0 - uv.y);
+	float q = uA.x * p.x + uA.y * p.y + uB;
+	float dEdge = q - uP;
+	float band = exp(-dEdge * dEdge * 200.0);
+	float ripple = sin(dEdge * 48.0 + uv.x * 5.0 + uP * 6.0) * band * uLift;
+	vec2 wp = p + (uA * 0.016 + vec2(-uA.y, uA.x) * 0.011) * ripple;
+	gl_Position = vec4(wp.x * 2.0 - 1.0, -(wp.y * 2.0 - 1.0), 0.0, 1.0);
+	vWarp = wp;
+	vUv = uv;
 }
 `
 
 const FRAG_CURTAIN = `
 precision highp float;
+varying vec2 vWarp;
 varying vec2 vUv;
 uniform float uP;        // 拉开进度 0~1.02（终点越过边界，1.011 以上即完全不遮）
+uniform float uLift;     // 布面隆起强度 0..1
 uniform vec2 uA;
 uniform float uB;
 uniform vec3 uCloth;     // 幕布色（比页面背景深一点）
@@ -74,9 +92,8 @@ float fbm(vec2 p) {
 }
 
 void main() {
-	// vUv 来自 NDC，vUv.y = 1 在屏幕上方；而方向表 DIRS 用的都是
-	// "y 向下"的屏幕坐标。这里翻一次统一到屏幕坐标，否则上下与四个对角方向会整体镜像。
-	vec2 p = vec2(vUv.x, 1.0 - vUv.y);
+	// p 是顶点位移后的屏幕坐标（与 VERT 同一套公式）——布面跟着几何一起变形
+	vec2 p = vWarp;
 	float q = uA.x * p.x + uA.y * p.y + uB;
 	// 布边不平直：频率要高、幅度要小——低频大振幅会鼓出一个"补丁"，不像布边
 	float wobble = (fbm(vUv * 16.0) - 0.5) * 0.022;
@@ -87,6 +104,14 @@ void main() {
 	float fold = sin(vUv.x * 26.0 + fbm(vUv * 3.0) * 6.0) * 0.5 + 0.5;
 	vec3 col = mix(uCloth, uCloth2, fold * 0.55);
 	col = mix(col, uCloth2, fbm(vUv * 4.0) * 0.25);
+
+	// 拉扯褶皱带：幕布侧靠近布边处，一道道垂直于拉开方向的明暗褶皱——
+	// 布被拉动的挤压感；起手/收尾 uLift=0 时完全平静
+	float dEdge = q - uP;
+	float behind = smoothstep(edge + 0.015, edge + 0.05, q) * (1.0 - smoothstep(edge + 0.10, edge + 0.17, q));
+	float pull = sin(dEdge * 62.0 + wobble * 40.0) * 0.5 + 0.5;
+	col *= 1.0 + (pull - 0.5) * behind * uLift * 0.9;
+
 	col += smoothstep(edge + 0.012, edge + 0.001, q) * step(q, edge + 0.012) * 0.05;
 
 	gl_FragColor = vec4(col, covered);
@@ -98,10 +123,11 @@ let gl: WebGL2RenderingContext | null = null
 let progCurtain: WebGLProgram | null = null
 let vaoCurtain: WebGLVertexArrayObject | null = null
 let bufCurtain: WebGLBuffer | null = null
+let bufIdx: WebGLBuffer | null = null
 
 // uniform 的 key 写成字面量联合，`u.uP` 这类访问才不会在 noUncheckedIndexedAccess
 // 下被推成 `WebGLUniformLocation | null | undefined`。
-const CURTAIN_KEYS = ['uP', 'uA', 'uB', 'uCloth', 'uCloth2'] as const
+const CURTAIN_KEYS = ['uP', 'uA', 'uB', 'uCloth', 'uCloth2', 'uLift'] as const
 type Locs<K extends readonly string[]> = Record<K[number], WebGLUniformLocation | null>
 
 let uCurtain = {} as Locs<typeof CURTAIN_KEYS>
@@ -114,6 +140,8 @@ let reduced = false
 let dirKey = 'lt'
 let phase = 'idle'
 let curtainP = 0
+let curtainLift = 0        // 布面隆起强度：拉开中段最大（sin(p'×π)），起手/收尾为 0
+let curtainIndexCount = 0  // 幕布网格的索引数
 let firstError = -1
 let lastError = 0
 let dpr = 1
@@ -221,8 +249,9 @@ function draw() {
 
 	gl.useProgram(progCurtain)
 	gl.uniform1f(uCurtain.uP, curtainP)
+	gl.uniform1f(uCurtain.uLift, curtainLift)
 	gl.bindVertexArray(vaoCurtain)
-	gl.drawArrays(gl.TRIANGLES, 0, 3)
+	gl.drawElements(gl.TRIANGLES, curtainIndexCount, gl.UNSIGNED_SHORT, 0)
 	gl.bindVertexArray(null)
 	draws++
 
@@ -245,6 +274,8 @@ function loop(now: number) {
 		// 终点直接推到 1.02（边界外）：布边自带 fbm 抖动 ±0.011，如果进度停在 1，
 		// 抖回来的那半圈会在收尾的角落留一条 14px 的残布。1.02 保证揭开即干净。
 		curtainP = 1.02 * (1 - Math.pow(1 - p, 2.2))
+		// 隆起强度：拉开中段最大（布被拽得最紧的时候），起手/收尾完全平静
+		curtainLift = Math.sin(Math.min(1, curtainP / 1.02) * Math.PI)
 
 		if (elapsed < dur) phase = 'curtain'
 		else {
@@ -286,16 +317,45 @@ onMounted(() => {
 	const c = readColors()
 	uCurtain = locs(progCurtain, CURTAIN_KEYS)
 
-	// 幕布：一个全屏三角形就够
+	// 幕布：全屏网格——拉开中段顶点做拉扯位移，全屏三角做不了局部变形
+	const SEG_X = 96
+	const SEG_Y = 54
+	const verts = new Float32Array((SEG_X + 1) * (SEG_Y + 1) * 2)
+	for (let j = 0; j <= SEG_Y; j++) {
+		for (let i = 0; i <= SEG_X; i++) {
+			const k = (j * (SEG_X + 1) + i) * 2
+			verts[k] = i / SEG_X
+			verts[k + 1] = j / SEG_Y
+		}
+	}
+	const idx = new Uint16Array(SEG_X * SEG_Y * 6)
+	let n = 0
+	for (let j = 0; j < SEG_Y; j++) {
+		for (let i = 0; i < SEG_X; i++) {
+			const a = j * (SEG_X + 1) + i
+			const b = a + 1
+			const c2 = a + SEG_X + 1
+			const d = c2 + 1
+			idx[n++] = a; idx[n++] = c2; idx[n++] = b
+			idx[n++] = b; idx[n++] = c2; idx[n++] = d
+		}
+	}
+	curtainIndexCount = idx.length
+
 	bufCurtain = gl.createBuffer()
 	gl.bindBuffer(gl.ARRAY_BUFFER, bufCurtain)
-	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
+	gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW)
+	bufIdx = gl.createBuffer()
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufIdx)
+	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW)
 
 	vaoCurtain = gl.createVertexArray()
 	gl.bindVertexArray(vaoCurtain)
 	const locPosC = gl.getAttribLocation(progCurtain, 'position')
+	gl.bindBuffer(gl.ARRAY_BUFFER, bufCurtain)
 	gl.enableVertexAttribArray(locPosC)
 	gl.vertexAttribPointer(locPosC, 2, gl.FLOAT, false, 0, 0)
+	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufIdx)   // 索引绑定属于 VAO 状态
 	gl.bindVertexArray(null)
 
 	gl.useProgram(progCurtain)
@@ -372,6 +432,7 @@ onBeforeUnmount(() => {
 	ro = null
 	if (gl) {
 		gl.deleteBuffer(bufCurtain)
+		gl.deleteBuffer(bufIdx)
 		gl.deleteVertexArray(vaoCurtain)
 		gl.deleteProgram(progCurtain)
 		gl.getExtension('WEBGL_lose_context')?.loseContext()
