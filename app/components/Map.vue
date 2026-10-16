@@ -323,11 +323,23 @@ const PALETTE: [string, string][] = [
 // 线路样式常量
 // 底层折线始终存在（负责点击命中）；选中时它变成一圈半透明光晕，渐变分段线叠在上面
 const STYLE = {
-    default: { strokeWeight: 6, strokeOpacity: 0.72, zIndex: 10, isOutline: true },
-    preview: { strokeWeight: 7, strokeOpacity: 0.95, zIndex: 50, isOutline: true },
-    active: { strokeWeight: 15, strokeOpacity: 0.22, zIndex: 100, isOutline: false },
+    default: { strokeWeight: 5, strokeOpacity: 0.68, zIndex: 10, isOutline: true },
+    preview: { strokeWeight: 7, strokeOpacity: 0.96, zIndex: 50, isOutline: true },
+    active: { strokeWeight: 16, strokeOpacity: 0.24, zIndex: 100, isOutline: false },
     // 有其他线路被选中/预览时，其它线路淡化的样式
-    dimmed: { strokeWeight: 3, strokeOpacity: 0.12, zIndex: 10, isOutline: false },
+    dimmed: { strokeWeight: 3, strokeOpacity: 0.1, zIndex: 10, isOutline: false },
+};
+
+const AREA_STYLE = {
+    fillColor: "#aeb9a4",       // 鼠尾草灰绿：区域轻铺底，不与线路争色
+    fillOpacity: 0.13,
+    strokeColor: "#9b907d",     // 暖石色边界
+    strokeOpacity: 0.72,
+    strokeWeight: 1,
+    hoverFillColor: "#d7bd83", // 淡赭金：悬停范围
+    hoverFillOpacity: 0.28,
+    hoverStrokeColor: "#a87535",
+    hoverStrokeWeight: 2,
 };
 
 // 选中线路的渐变：分成多少段（越多越平滑，越耗性能；只对选中的一条线生效）
@@ -746,7 +758,7 @@ function renderLine(line: BusLine, color: string) {
         lineJoin: "round",
         lineCap: "round",
         strokeStyle: "solid",
-        outlineColor: "#ffffff", // 白色细描边：重叠线路之间有清晰的分界，也更有玻璃质感
+        outlineColor: "#fffaf0", // 暖白描边：让重叠线路在浅色底图上保持分界
         borderWeight: 1,
         cursor: "pointer", // 悬浮在手型光标，提示可点击
         ...STYLE.default,
@@ -773,7 +785,7 @@ function renderLineBatch(batch: BusLine[]) {
             lineJoin: "round",
             lineCap: "round",
             strokeStyle: "solid",
-            outlineColor: "#ffffff",
+            outlineColor: "#fffaf0",
             borderWeight: 1,
             cursor: "pointer",
             ...STYLE.default,
@@ -1026,8 +1038,19 @@ function ringArea(ring: number[]): number {
 
 function setAreaHover(poly: any, on: boolean) {
     poly.setOptions(on
-        ? { fillOpacity: 0.42, strokeColor: "#c2410c", strokeWeight: 2.4 }
-        : { fillOpacity: 0.14, strokeColor: "#5b7c99", strokeWeight: 1 });
+        ? {
+            fillColor: AREA_STYLE.hoverFillColor,
+            fillOpacity: AREA_STYLE.hoverFillOpacity,
+            strokeColor: AREA_STYLE.hoverStrokeColor,
+            strokeWeight: AREA_STYLE.hoverStrokeWeight,
+        }
+        : {
+            fillColor: AREA_STYLE.fillColor,
+            fillOpacity: AREA_STYLE.fillOpacity,
+            strokeColor: AREA_STYLE.strokeColor,
+            strokeOpacity: AREA_STYLE.strokeOpacity,
+            strokeWeight: AREA_STYLE.strokeWeight,
+        });
 }
 
 function applyHover(adcode: string, on: boolean) {
@@ -1170,9 +1193,9 @@ async function renderArea(adcode: string, precision: "overview" | "detail") {
             areaFrame = frameRings.map((path: number[][]) => {
                 const line = new AMap.Polyline({
                     path,
-                    strokeColor: "#b8860b",
-                    strokeWeight: 2,
-                    strokeOpacity: 0.9,
+                    strokeColor: "#a98248",
+                    strokeWeight: 1.5,
+                    strokeOpacity: 0.78,
                     strokeStyle: "dashed",
                     // 层级：区域块 2 < 外框 8 < 线路 10/50/100
                     zIndex: 8,
@@ -1196,11 +1219,11 @@ async function renderArea(adcode: string, precision: "overview" | "detail") {
                 if (path.length < 3) continue; // 成不了面的碎环直接跳过
                 const poly = new AMap.Polygon({
                     path,
-                    strokeColor: "#5b7c99",
-                    strokeWeight: 1,
-                    strokeOpacity: 0.85,
-                    fillColor: "#7ba7c9",
-                    fillOpacity: 0.14,
+                    strokeColor: AREA_STYLE.strokeColor,
+                    strokeWeight: AREA_STYLE.strokeWeight,
+                    strokeOpacity: AREA_STYLE.strokeOpacity,
+                    fillColor: AREA_STYLE.fillColor,
+                    fillOpacity: AREA_STYLE.fillOpacity,
                     cursor: "pointer",
                     // 区域块压在线路之下（线路走 STYLE.default，zIndex 10）：
                     // 层级定成 区域块 2 < 外框 8 < 线路 10/50/100，
@@ -1292,8 +1315,11 @@ async function initMap() {
         // 搜城市不受影响 —— loadData 末尾会 setFitView 到线路范围。
         zoom: 5,
         center: [104.2, 35.8],
-        mapStyle: "amap://styles/whitesmoke", // 浅色极简底图，凸显公交线路
+        mapStyle: "amap://styles/light", // 低对比银灰底图：路线和行政区覆盖层更清楚
     });
+
+    // 隐去 POI 点与建筑块，保留道路及区域底色，让公交线网成为地图的视觉主层。
+    map.setFeatures(["bg", "road"]);
 
     // 点击地图：命中线路则选中；多条线路时弹候选
     map.on("click", onMapClick);
