@@ -6,7 +6,7 @@
 	     动画参数全部用 InkCurtain 的默认值，唯一改的是 autoPlay=false：
 	     常驻组件不能一挂载就自己播，播不播、何时播都听 covering 的。 -->
 	<div v-if="covering" class="curtain-veil" aria-hidden="true"></div>
-	<InkCurtain ref="curtainRef" mode="curtain" :auto-play="false" :paused="covering" />
+	<InkCurtain ref="curtainRef" :auto-play="false" :paused="covering" />
 </template>
 
 <script setup lang="ts">

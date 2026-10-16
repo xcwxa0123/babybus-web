@@ -5,9 +5,7 @@
 	     纸层与墨线已按需求移除（它们仍在 lab2 之外的组件里，本页不再引用）。 -->
 	<div v-if="clientReady" class="lab">
 		<InkCurtain ref="curtainRef" :dir="curtainDir"
-			:duration="curtainDuration" :count="curtainCount" :size="curtainSize" :gravity="curtainGravity"
-			:restitution="curtainRest" :resti-decay="curtainRestDecay" :bounce-count="curtainBounce"
-			:opacity="curtainOpacity" :paused="paused" />
+			:duration="curtainDuration" :paused="paused" />
 
 		<!-- 模拟登录卡：判断可读性用 -->
 		<div class="lab-card">
@@ -28,7 +26,7 @@
 				<span class="lab-dot"></span>
 				<div>
 					<div class="lab-title">幕布实验台</div>
-					<div class="lab-sub">raw WebGL2 · 8 方向 · 落块 + 下垂烟花</div>
+					<div class="lab-sub">raw WebGL2 · 8 方向 · 撕布边拉开</div>
 				</div>
 			</div>
 
@@ -43,34 +41,6 @@
 				<el-slider v-model="curtainDuration" :min="0.5" :max="4" :step="0.1" size="small" style="flex:1" />
 				<span class="lab-val">{{ curtainDuration.toFixed(1) }}s</span>
 			</div>
-			<div class="lab-row"><span class="lab-lbl">方块</span>
-				<el-slider v-model="curtainCount" :min="100" :max="2000" :step="50" size="small" style="flex:1" />
-				<span class="lab-val">{{ curtainCount }}</span>
-			</div>
-			<div class="lab-row"><span class="lab-lbl">尺寸</span>
-				<el-slider v-model="curtainSize" :min="4" :max="40" :step="1" size="small" style="flex:1" />
-				<span class="lab-val">{{ curtainSize }}px</span>
-			</div>
-			<div class="lab-row"><span class="lab-lbl">重力</span>
-				<el-slider v-model="curtainGravity" :min="80" :max="1800" :step="20" size="small" style="flex:1" />
-				<span class="lab-val">{{ curtainGravity }}</span>
-			</div>
-			<div class="lab-row"><span class="lab-lbl">弹性</span>
-				<el-slider v-model="curtainRest" :min="0.05" :max="0.95" :step="0.05" size="small" style="flex:1" />
-				<span class="lab-val">{{ curtainRest.toFixed(2) }}</span>
-			</div>
-			<div class="lab-row"><span class="lab-lbl">衰减</span>
-				<el-slider v-model="curtainRestDecay" :min="0.2" :max="1" :step="0.05" size="small" style="flex:1" />
-				<span class="lab-val">{{ curtainRestDecay.toFixed(2) }}</span>
-			</div>
-			<div class="lab-row"><span class="lab-lbl">弹跳</span>
-				<el-slider v-model="curtainBounce" :min="0" :max="5" :step="1" size="small" style="flex:1" />
-				<span class="lab-val">{{ curtainBounce }} 次</span>
-			</div>
-			<div class="lab-row"><span class="lab-lbl">透明</span>
-				<el-slider v-model="curtainOpacity" :min="0.2" :max="1" :step="0.05" size="small" style="flex:1" />
-				<span class="lab-val">{{ curtainOpacity.toFixed(2) }}</span>
-			</div>
 
 			<div class="lab-row lab-toggles">
 				<el-switch v-model="paused" size="small" active-text="暂停" inline-prompt />
@@ -79,8 +49,8 @@
 			<div class="lab-sec">读数</div>
 			<div class="lab-read">
 				<div><b>{{ fps }}</b><span>FPS</span></div>
-				<div><b>{{ actualParticles }}</b><span>实际方块</span></div>
 				<div><b>{{ curtainDir === 'random' ? '随机' : '锁定' }}</b><span>方向</span></div>
+				<div><b>{{ draws }}</b><span>绘制帧</span></div>
 			</div>
 			<div class="lab-note">阶段：{{ curtainPhase }}</div>
 
@@ -104,22 +74,12 @@ const CURTAIN_DIRS: Record<string, string> = {
 
 const curtainDir = ref('random')
 const curtainDuration = ref(1.0)
-const curtainCount = ref(2000)
-const curtainSize = ref(4)
-const curtainGravity = ref(740)
-// 弹性：第一次触底后速度保留多少（0.55 → 弹起高度约为落差 30%）
-const curtainRest = ref(0.30)
-// 衰减：每次触底后恢复系数再乘这个值（1 = 不衰减；0.25 就是"每次减 75%"）
-const curtainRestDecay = ref(1)
-// 弹跳次数：弹够这么多次后再触底就直接掉出屏幕
-const curtainBounce = ref(2)
-const curtainOpacity = ref(0.45)
 const curtainPhase = ref('—')
-const actualParticles = ref(0)
 const glInfo = ref('等待组件就绪…')
 const paused = ref(false)
 
 const fps = ref(0)
+const draws = ref(0)
 let frames = 0
 let fpsAt = 0
 
@@ -140,12 +100,12 @@ onMounted(() => {
 				const d = curtainRef.value?.debug?.()
 				if (d) {
 					curtainPhase.value = `${d.phase} · ${d.elapsed}s · ${d.dirLabel || d.dir}`
-					actualParticles.value = d.particles ?? 0
+					draws.value = d.draws ?? 0
 					glInfo.value = [
 						(d.glVersion || 'N/A') + (d.maxAttribs ? '   MAX_VERTEX_ATTRIBS: ' + d.maxAttribs : ''),
 						'链接: ' + (d.linked ? 'OK' : '失败') + (d.linkLog ? ' — ' + d.linkLog : ''),
 						'属性位置: ' + Object.entries(d.attribLocs || {}).map(([k, v]) => k + '=' + v).join('  '),
-						'绘制次数: ' + d.draws + '   粒子: ' + d.particles,
+						'绘制次数: ' + d.draws,
 						'getError: 首次 ' + (d.firstError < 0 ? '0 (NO_ERROR) ✓' : String(d.firstError))
 							+ '   最近 ' + d.lastError,
 					].join('\n')

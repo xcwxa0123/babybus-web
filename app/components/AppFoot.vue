@@ -41,14 +41,31 @@ function noise1(x: number, seed: number) {
 	return h1(i + seed) * (1 - u) + h1(i + 1 + seed) * u
 }
 
-// 撕布边：低频大起伏 + 高频小抖 + 微锯齿，三层叠加后钳进 [6, 42]
+// 撕布边：低频大起伏 + 高频小抖 + 微锯齿，三层叠加后钳进 [6, 42]。
+// 活布缘：噪声相位随 hemTick 缓慢漂移（每 450ms 换一档）——布缘真的在飘，
+// 而不是一条焊死的装饰线。离散换相位而不是连续时间：重算便宜、视觉够缓。
+const hemTick = ref(0)
+let hemTimer: ReturnType<typeof setInterval> | null = null
+
 function hemY(t: number) {
+	const s = hemTick.value * 0.37
 	let y = 24
-		+ (noise1(t * 7.3, 3.1) - 0.5) * 20
-		+ (noise1(t * 23.0, 7.7) - 0.5) * 9
-		+ (noise1(t * 61.0, 11.3) - 0.5) * 3.5
+		+ (noise1(t * 7.3, 3.1 + s) - 0.5) * 20
+		+ (noise1(t * 23.0, 7.7 + s) - 0.5) * 9
+		+ (noise1(t * 61.0, 11.3 + s) - 0.5) * 3.5
 	return Math.max(6, Math.min(42, y))
 }
+
+onMounted(() => {
+	// 尊重减弱动效：布缘保持静止
+	if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+	hemTimer = setInterval(() => { hemTick.value++ }, 450)
+})
+
+onBeforeUnmount(() => {
+	if (hemTimer) clearInterval(hemTimer)
+	hemTimer = null
+})
 
 const HEM_N = 96
 const HEM_W = 1440
@@ -90,6 +107,7 @@ const hemLine = computed(() => hemPoints())
 	bottom: 3px;
 	font-size: 9px;
 	letter-spacing: 3px;
-	color: var(--on-stage-faint);
+	color: var(--on-stage-mid);
+	text-shadow: 0 1px 6px rgba(20, 14, 6, 0.7);
 }
 </style>

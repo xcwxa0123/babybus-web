@@ -53,9 +53,27 @@ const tagStyle = computed(() => ({
 	top: `${kingPos.y - 14}px`,
 }))
 
-function doLogout() {
+// 熄灯离场：先让背景的灯一盏盏熄灭（0.9s 的熄灯波从右往左扫），
+// 再清身份、盖幕回门禁——"离场时熄灯"与"进场时点灯"是同一叙事的两端。
+// 跳转完成后把 uLightsOut 复位：门禁页揭幕时要正常点灯，不能继承黑场
+async function doLogout() {
+	kingTagVisible.value = false
+	await lightsOut()
 	authStore.logout()
-	navigateTo('/login')
+	await navigateTo('/login')
+	lightsOutT = -1
+}
+
+// 熄灯动画完成 Promise（loop 里推进 lightsOutT）
+function lightsOut(): Promise<void> {
+	return new Promise(resolve => {
+		lightsOutT = 0
+		const check = () => {
+			if (lightsOutT >= 1) resolve()
+			else requestAnimationFrame(check)
+		}
+		requestAnimationFrame(check)
+	})
 }
 
 // ── 金尘：全屏自由飞行，主容器（卡片群）是从外面撞的"引力体" ──
@@ -246,6 +264,8 @@ uniform float uReveal;   // 揭幕亮起 0..1
 uniform float uPulse;    // 登录成功光脉冲 0..1
 uniform vec3 uSpot;      // 暖光衬底：x, y（屏幕归一）+ 强度
 uniform vec2 uLamp;      // 鼠标提灯：光源位置（屏幕归一，平滑跟随）
+uniform float uLightsOut; // 熄灯离场 0..1（波前从右往左扫）
+uniform vec3 uTint;      // 时段色温（乘法色调：午后偏金、深夜偏冷）
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float noise(vec2 p) {
@@ -357,6 +377,17 @@ void main() {
 	col *= mix(0.5, 1.0, uReveal);
 	col *= 1.0 + uPulse * 0.18;
 
+	// 时段色温：午后偏金、深夜偏冷（uTint 由 JS 按当前时间算好传进来）
+	col *= uTint;
+
+	// 熄灯离场：波前从右往左扫过，扫过的区域布面/尘埃/光一起沉入黑暗
+	//（留 10% 微光不全黑——完全黑掉反而像 bug）。
+	// 注意 lit 的方向：波前左侧（还没扫到）是亮的，右侧（已扫过）熄灭——
+	// 写反了的话默认态（front=1.05）整屏就只剩最右一条是亮的
+	float front = 1.05 - uLightsOut * 1.3;
+	float lit = 1.0 - smoothstep(front - 0.03, front + 0.16, p.x);
+	col *= mix(0.10, 1.0, lit);
+
 	// 极淡颗粒防色带
 	col += (hash(gl_FragCoord.xy + fract(uTime) * 7.0) - 0.5) * 0.015;
 
@@ -375,6 +406,12 @@ let reduced = false
 // 暖光衬底的基准位置与强度（variant 决定，draw 里绕基准游移）
 const spotBase = { x: 0.72, y: 0.5 }
 let spotI = 1.0
+// 舞台光当前位置（平滑追目标）+ hover 卡片的聚光目标
+const spotCur = { x: 0.72, y: 0.5 }
+const spotFocus = { x: 0.5, y: 0.42, active: false }
+let lightsOutT = -1      // 熄灯离场进度，-1 = 未触发
+let tintRGB: number[] = [1, 1, 1]
+const onOverRef = ref<((e: MouseEvent) => void) | null>(null)   // 聚光监听（unmount 时移除用）
 let ro: ResizeObserver | null = null
 
 // 每次路由切换（Gate 盖幕→揭开）重播"点灯进场"：尘埃从左到右重新出生
@@ -383,7 +420,7 @@ watch(() => route.path, () => {
 	revealT = 0
 })
 
-const UNIFORM_KEYS = ['uRes', 'uTime', 'uMouse', 'uReveal', 'uPulse', 'uSpot', 'uLamp'] as const
+const UNIFORM_KEYS = ['uRes', 'uTime', 'uMouse', 'uReveal', 'uPulse', 'uSpot', 'uLamp', 'uLightsOut', 'uTint'] as const
 type Locs<K extends readonly string[]> = Record<K[number], WebGLUniformLocation | null>
 let u = {} as Locs<typeof UNIFORM_KEYS>
 
@@ -410,9 +447,18 @@ function draw() {
 	gl.uniform1f(u.uReveal, revealT)
 	gl.uniform1f(u.uPulse, Math.max(0, pulseT))
 	gl.uniform2f(u.uLamp, mouse.x, mouse.y)
-	// 光斑游移：衬底绕基准点缓慢漂移——毛玻璃卡片上的透光随之游移
-	gl.uniform3f(u.uSpot, spotBase.x + Math.sin(time * 0.043) * 0.05,
-		spotBase.y + Math.cos(time * 0.031) * 0.04, spotI)
+	// 舞台光：游移基准 + hover 卡片时聚到卡片中心（lerp 平滑，强度提满）——
+	// 毛玻璃卡片上的透光随之游移/聚焦，DOM 与 WebGL 的联动是免费的
+	const baseX = spotBase.x + Math.sin(time * 0.043) * 0.05
+	const baseY = spotBase.y + Math.cos(time * 0.031) * 0.04
+	const tX = spotFocus.active ? spotFocus.x : baseX
+	const tY = spotFocus.active ? spotFocus.y : baseY
+	spotCur.x += (tX - spotCur.x) * 0.055
+	spotCur.y += (tY - spotCur.y) * 0.055
+	const si = spotFocus.active ? Math.max(spotI, 1.0) : spotI
+	gl.uniform3f(u.uSpot, spotCur.x, spotCur.y, si)
+	gl.uniform1f(u.uLightsOut, Math.max(0, lightsOutT))
+	gl.uniform3fv(u.uTint, tintRGB)
 	gl.bindVertexArray(vao)
 	gl.drawArrays(gl.TRIANGLES, 0, 3)
 }
@@ -427,6 +473,7 @@ function loop(now: number) {
 			pulseT += dt / 1.1
 			if (pulseT > 1) pulseT = -1
 		}
+		if (lightsOutT >= 0 && lightsOutT < 1) lightsOutT = Math.min(1, lightsOutT + dt / 0.9)
 		mouse.x += (mouse.tx - mouse.x) * 0.04
 		mouse.y += (mouse.ty - mouse.y) * 0.04
 		updateKing(dt)
@@ -498,9 +545,27 @@ onMounted(() => {
 	resize()
 	draw()
 	window.addEventListener('mousemove', onMouseMove, { passive: true })
+	// 舞台灯聚光：hover 到卡片上时，光斑缓缓偏向那张卡片（mouseover 委托，零页面侵入）
+	const onOver = (e: MouseEvent) => {
+		const t = (e.target as HTMLElement | null)?.closest?.('.panel, .module-card, .welcome-band') as HTMLElement | null
+		if (t) {
+			const r = t.getBoundingClientRect()
+			spotFocus.x = (r.left + r.width / 2) / window.innerWidth
+			spotFocus.y = (r.top + r.height / 2) / window.innerHeight
+			spotFocus.active = true
+		} else {
+			spotFocus.active = false
+		}
+	}
+	window.addEventListener('mouseover', onOver, { passive: true })
 	ro = new ResizeObserver(resize)
 	ro.observe(canvas)
 	raf = requestAnimationFrame(loop)
+
+	// 时段色温：15 点最暖（偏金），凌晨 3 点最冷（偏蓝灰）——挂载时算一次即可
+	const h = new Date().getHours() + new Date().getMinutes() / 60
+	const w = 0.5 + 0.5 * Math.cos(((h - 15) / 24) * Math.PI * 2)
+	tintRGB = [0.92 + 0.14 * w, 0.97 + 0.03 * w, 1.08 - 0.18 * w]
 })
 
 // 登录成功时由页面调用：一圈暖光从卡片位置扩散
@@ -508,14 +573,33 @@ function pulse() {
 	pulseT = 0
 }
 
+defineExpose({ pulse, lightsOut })
 
+onBeforeUnmount(() => {
+	cancelAnimationFrame(raf)
+	raf = 0
+	window.removeEventListener('mousemove', onMouseMove)
+	if (onOverRef.value) window.removeEventListener('mouseover', onOverRef.value)
+	ro?.disconnect()
+	ro = null
+	if (gl) {
+		gl.deleteVertexArray(vao)
+		vao = null
+		gl.getExtension('WEBGL_lose_context')?.loseContext()
+	}
+	gl = null
+})
 </script>
 
 <style scoped>
 .ink-atmosphere {
 	position: fixed;
 	inset: 0;
-	z-index: 0;
+	/* 必须是 -1：fixed + z-index:0 的定位元素在层叠序里排在所有流内内容
+	   （卡片、footer、散字）之上，而不透明 canvas 会把它们整个淹掉——
+	   实测 footer 的浅字就是这样消失的。z-index:-1 把它关进 #app 的
+	   stacking context 底层：垫在一切内容之下、body 背景之上。 */
+	z-index: -1;
 	pointer-events: none;
 	/* WebGL 拿不到时的兜底底色：和 shader 的中调暖色一致 */
 	background: linear-gradient(180deg, #8d7f68, #6b5f4c);
