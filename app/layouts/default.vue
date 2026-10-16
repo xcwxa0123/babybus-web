@@ -2,9 +2,9 @@
     <!-- app-shell：flex 列外壳，配合 index.css 让页脚在内容不满一屏时贴住视口底部。
          main 是必须的——剩余空间由它吃掉，直接给 <slot /> 没法加样式。 -->
     <div class="app-shell">
-        <!-- 全站氛围层（WebGL 布面 + 侧光 + 尘埃）：垫在所有内容之下。
-             busmap 豁免——大面积地图画布上叠光效会怪 -->
-        <InkAtmosphere variant="stage" v-if="route.path !== '/busmap'" />
+        <!-- 全站氛围层（WebGL 布面 + 舞台灯 + 尘埃）：垫在一切内容之下。
+             busmap 的地图是不透明画布，氛围只在四周缝隙和面板毛玻璃上可见 -->
+        <InkAtmosphere variant="stage" />
         <AppHeader />
 
         <main>
@@ -16,8 +16,6 @@
 </template>
 
 <script setup lang="ts">
-const route = useRoute()
-
 // -TODO 检索后删除searchQuery activeQuery
 
 

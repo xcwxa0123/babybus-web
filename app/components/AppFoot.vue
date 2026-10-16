@@ -3,7 +3,7 @@
 	     内容页的世界观是"登录后穿过幕布、站在纸面上工作"——这条布边就是
 	     两个世界之间那条缝。形状由一维 fbm 噪声采样生成（和幕布 shader 的
 	     hash/noise 同一套公式，CPU 版），seed 写死 ⇒ 每次渲染长同一个样子。 -->
-	<div class="foot-hem" aria-hidden="true">
+	<div v-if="route.path !== '/busmap'" class="foot-hem" aria-hidden="true">
 		<svg class="hem-svg" viewBox="0 0 1440 48" preserveAspectRatio="none">
 			<defs>
 				<!-- 深色舞台上的撕布边 = "被脚灯照亮的下缘"：顶部融入深底，
@@ -29,6 +29,8 @@
 </template>
 
 <script setup lang="ts">
+const route = useRoute()
+
 // 撕布边波形：解析波形叠加（四层 sin：缓风 + 宽波 + 细波 + 微波，各带自己的
 // 时间速度）。时间直接进 sin 参数 ⇒ 数学上连续，永不跳变——
 // 之前两版"活布缘"都用噪声查表 + seed/相位漂移，h1 的 sin/fract 对 seed 混沌敏感，
@@ -85,9 +87,22 @@ function hemLoop(now: number) {
 }
 
 onMounted(() => {
+	if (route.path === '/busmap') return
 	applyHem(0)   // 首帧立即绘制，避免 path 空白一闪
 	if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
 	hemRaf = requestAnimationFrame(hemLoop)
+})
+
+watch(() => route.path, (path) => {
+	cancelAnimationFrame(hemRaf)
+	hemRaf = 0
+	hemLast = 0
+	hemT = 0
+	if (path === '/busmap') return
+	applyHem(0)
+	if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+		hemRaf = requestAnimationFrame(hemLoop)
+	}
 })
 
 onBeforeUnmount(() => {
