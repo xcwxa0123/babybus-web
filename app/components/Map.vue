@@ -225,17 +225,17 @@ const listScrollbarRef = ref<any>(null);
 // 滚动左侧列表到指定线路项（带平滑动画）
 function scrollToLine(busId: string) {
   const escapedId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(busId) : busId.replace(/["\\]/g, "\\$&");
-  const item = listScrollbarRef.value?.querySelector?.(`[data-line-id="${escapedId}"]`) as HTMLElement | null;
-  if (!item) return;
+  const container = listScrollbarRef.value as HTMLElement | null;
+  const item = container?.querySelector?.(`[data-line-id="${escapedId}"]`) as HTMLElement | null;
+  if (!item || !container) return;
 
-  // 用浏览器原生 scrollIntoView，自动滚到最近的滚动容器（我们的 panel-scrollbar），
-  // 比手动算 offset 更可靠
-  try {
-    item.scrollIntoView({ behavior: "smooth", block: "center" });
-  } catch {
-    // 兼容不支持 options 的旧浏览器
-    item.scrollIntoView();
-  }
+  // 只调整线路列表自己的 scrollTop；scrollIntoView 会连页面外层一起滚动。
+  const itemTop = container.scrollTop + item.getBoundingClientRect().top - container.getBoundingClientRect().top;
+  const itemBottom = itemTop + item.offsetHeight;
+  const visibleTop = container.scrollTop;
+  const visibleBottom = visibleTop + container.clientHeight;
+  if (itemTop < visibleTop) container.scrollTo({ top: itemTop - 8, behavior: "smooth" });
+  else if (itemBottom > visibleBottom) container.scrollTo({ top: itemBottom - container.clientHeight + 8, behavior: "smooth" });
 }
 
 // 点击命中多条线路时的候选弹窗

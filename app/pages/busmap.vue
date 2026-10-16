@@ -19,21 +19,73 @@
 </template>
 
 <script setup lang="ts">
+useHead({ bodyAttrs: { class: 'busmap-workspace' } })
+
 // 搜索与线路状态由 Map.vue 统一管理；此页只负责地图页的标题和整体版式。
 </script>
 
 <style scoped>
 .busmap-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 地图是固定视口工作区：关闭本页的文档滚动，把可用高度留给工作区。 */
+:global(body.busmap-workspace) {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+:global(body.busmap-workspace .app-shell) {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:global(body.busmap-workspace .app-shell > header) {
+  flex: 0 0 7.9vh;
+}
+
+:global(body.busmap-workspace .app-shell > main) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:global(body.busmap-workspace .foot-hem) {
+  display: none;
+}
+
+:global(body.busmap-workspace footer) {
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 6px 20px;
+}
+
+:global(body.busmap-workspace .footer-logo) {
+  display: none;
+}
+
+:global(body.busmap-workspace .footer-sub) {
+  font-size: 10px;
+  line-height: 22px;
+  letter-spacing: .5px;
+}
+
+.busmap-page {
   --map-page-gutter: clamp(20px, 4vw, 56px);
   width: 100%;
   max-width: 1720px;
   margin: 0 auto;
-  padding: 10px var(--map-page-gutter) 28px;
+  padding: 6px var(--map-page-gutter) 14px;
   box-sizing: border-box;
 }
 
 .busmap-heading {
-  min-height: 86px;
+  min-height: 74px;
+  flex: 0 0 74px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -95,19 +147,22 @@
 
 /* 让地图成为标题下方的主舞台，同时为标题与页脚留出空间。 */
 .busmap-page :deep(.map-wrapper) {
-  height: clamp(480px, calc(100vh - 7.9vh - 170px), 880px);
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 @media (max-width: 760px) {
   .busmap-page {
     --map-page-gutter: 14px;
     padding-top: 4px;
-    padding-bottom: 18px;
+    padding-bottom: 10px;
   }
 
   .busmap-heading {
-    min-height: 76px;
-    padding-bottom: 12px;
+    min-height: 68px;
+    flex-basis: 68px;
+    padding-bottom: 8px;
   }
 
   .heading-note {
@@ -116,14 +171,31 @@
   }
 
   .busmap-page :deep(.map-wrapper) {
-    height: calc(100vh - 7.9vh - 150px);
-    min-height: 480px;
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
   }
 }
 
 @media (max-width: 420px) {
   .heading-note {
     display: none;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 560px) {
+  .busmap-heading {
+    min-height: 52px;
+    flex-basis: 52px;
+  }
+
+  .heading-description {
+    display: none;
+  }
+
+  .heading-title {
+    margin-top: 2px;
+    font-size: 20px;
   }
 }
 </style>

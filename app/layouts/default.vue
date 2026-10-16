@@ -16,8 +16,6 @@
 </template>
 
 <script setup lang="ts">
-const route = useRoute()
-
 // -TODO 检索后删除searchQuery activeQuery
 
 

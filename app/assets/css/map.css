@@ -699,13 +699,14 @@
 
     .map-wrapper .map-side {
         width: 100%;
-        height: min(34%, 280px);
-        min-height: 220px;
+        height: min(36%, 250px);
+        min-height: 0;
+        flex: 0 0 auto;
     }
 
     .map-wrapper .map-main {
         flex: 1;
-        min-height: 280px;
+        min-height: 0;
     }
 
     .map-wrapper .detail-bar {
