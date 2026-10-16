@@ -1,23 +1,23 @@
 <template>
     <div class="map-wrapper">
-        <!-- 左侧控制面板：搜索 + 线路列表 -->
-        <div class="panel" :class="{ collapsed: sidebarCollapsed, detailOpen: isDetailExpanded }">
-            <div class="panel-header">
-                <template v-if="!sidebarCollapsed">
-                    <el-input v-model="keywordInput" size="default" placeholder="输入城市名，按回车查询" clearable
-                        @keyup.enter="reload">
-                    </el-input>
-                </template>
-                <el-button class="search-btn" @click="reload" v-if="!sidebarCollapsed" title="查询"><el-icon><Search /></el-icon></el-button>
-                <el-button class="search-btn" @click="reloadAll" v-if="!sidebarCollapsed" title="全量查询（耗时较长）">全</el-button>
-                <el-button class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed"
-                    :title="sidebarCollapsed ? '展开' : '收起'">
-                    <el-icon v-if="sidebarCollapsed"><ArrowLeft /></el-icon>
-                    <el-icon v-else><ArrowRight /></el-icon>
-                </el-button>
+        <!-- 右：查询面板（tab：线路查询=现有功能；站点/周边=留口子待开发）。
+             DOM 顺序在地图前，flex order 控制视觉在右——原地改造，逻辑零迁移 -->
+        <aside class="map-side">
+            <div class="side-tabs">
+                <button v-for="t in SIDE_TABS" :key="t.key" class="side-tab"
+                    :class="{ active: sideTab === t.key }" @click="sideTab = t.key">{{ t.label }}</button>
             </div>
 
-            <div v-show="!sidebarCollapsed" class="panel-body">
+            <div v-show="sideTab === 'lines'" class="side-body">
+            <div class="panel-header">
+                <el-input v-model="keywordInput" size="default" placeholder="输入城市名，按回车查询" clearable
+                    @keyup.enter="reload">
+                </el-input>
+                <el-button class="search-btn" @click="reload" title="查询"><el-icon><Search /></el-icon></el-button>
+                <el-button class="search-btn" @click="reloadAll" title="全量查询（耗时较长）">全</el-button>
+            </div>
+
+            <div class="panel-body">
                 <div class="panel-subhead">
                     <span class="subhead-title">线路列表</span>
                     <span class="count-badge">{{ lines.length }}</span>
@@ -42,9 +42,18 @@
                     </div>
                 </div>
             </div>
-        </div>
+            </div><!-- /side-body(lines) -->
 
-        <!-- 地图 -->
+            <!-- 站点/周边：留口子（功能筹备中） -->
+            <div v-show="sideTab !== 'lines'" class="side-body side-ph">
+                <div class="ph-badge">{{ sideTab === 'stops' ? '站点查询' : '周边查询' }}</div>
+                <p class="ph-title">即将上线</p>
+                <p class="ph-sub">这个模块还在筹备中，先看看线路吧</p>
+            </div>
+        </aside>
+
+        <!-- 左：地图本体（面包屑/加载条/候选弹窗都是地图上的浮层） -->
+        <div class="map-main">
         <div ref="mapRef" class="map"></div>
 
         <!-- 区域栏：左边面包屑（下钻后靠它回上一级），右边是悬停到的区域名。
@@ -84,6 +93,7 @@
                 <span class="candidate-name">{{ c.name }}</span>
             </div>
         </div>
+        </div><!-- /map-main -->
 
         <!-- 底部信息弹框：当前选中线路 -->
         <div class="detail-bar" :class="{ collapsed: bottombarCollapsed }"
@@ -189,7 +199,13 @@ const keywordInput = ref(props.keyword ?? "");
 const lines = ref<BusLine[]>([]); // 渲染列表（去重后的正向线路）
 const allLines = ref<BusLine[]>([]); // 完整数据（含反向，供切换反向使用）
 const activeId = ref<string | null>(null);
-const sidebarCollapsed = ref(false);
+// 右侧查询面板的 tab：线路查询=现有功能；站点/周边=留口子（功能筹备中）
+const SIDE_TABS = [
+    { key: 'lines', label: '线路查询' },
+    { key: 'stops', label: '站点查询' },
+    { key: 'around', label: '周边查询' },
+] as const
+const sideTab = ref<'lines' | 'stops' | 'around'>('lines');
 const bottombarCollapsed = ref(true);
 const loading = ref(false);
 const loadError = ref("");

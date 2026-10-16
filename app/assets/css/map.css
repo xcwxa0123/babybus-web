@@ -56,15 +56,124 @@
 
 /* ── 组件骨架 ── */
 .map-wrapper {
-    position: relative;
+    /* 方案 Y：左地图 + 右 tab 查询面板（对齐 GPT 布局图）。
+       wrapper 只做容器，两块子卡片各自成型；底部给 detail-bar 预留 72px */
+    display: flex;
+    align-items: stretch;
+    gap: 14px;
     width: 100%;
-    height: 84vh;
+    height: calc(100vh - 7.9vh - 32px - 72px);
+    padding-bottom: 0;
+}
+
+/* 左：地图卡片（不透明画布 + 圆角边框，浮在布面上） */
+.map-main {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    border-radius: 14px;
     overflow: hidden;
+    border: 1px solid rgba(180, 160, 120, 0.22);
+    box-shadow: var(--shadow-md);
 }
 
 .map-wrapper .map {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
+}
+
+/* 右：查询面板卡片（tab + 内容区，毛玻璃） */
+.map-side {
+    width: 320px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--paper);
+    backdrop-filter: var(--surface-blur);
+    -webkit-backdrop-filter: var(--surface-blur);
+    border: 1px solid rgba(180, 160, 120, 0.22);
+    box-shadow: var(--shadow-md);
+}
+
+.side-tabs {
+    display: flex;
+    flex: none;
+    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
+}
+
+.side-tab {
+    flex: 1;
+    padding: 13px 0 11px;
+    background: none;
+    border: none;
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: var(--ink-light);
+    cursor: pointer;
+    position: relative;
+    transition: color 0.2s ease;
+}
+
+.side-tab:hover {
+    color: var(--ink-mid);
+}
+
+.side-tab.active {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.side-tab.active::after {
+    content: '';
+    position: absolute;
+    left: 22%;
+    right: 22%;
+    bottom: -1px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--sky-accent);
+}
+
+.side-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 站点/周边的留口子占位 */
+.side-ph {
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 40px 24px;
+}
+
+.ph-badge {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--sky-accent);
+    border: 1px solid rgba(74, 144, 196, 0.32);
+    padding: 4px 14px;
+    border-radius: 999px;
+}
+
+.ph-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--ink);
+}
+
+.ph-sub {
+    font-size: 12px;
+    color: var(--ink-light);
 }
 
 /* ── 浮层通用：与顶栏同一套半透明纸面 ── */
