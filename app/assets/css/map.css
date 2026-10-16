@@ -56,9 +56,9 @@
 
 /* ── 组件骨架 ── */
 .map-wrapper {
-    /* 方案 Y：左地图 + 右 tab 查询面板（对齐 GPT 布局图）。
-       wrapper 只做容器，两块子卡片各自成型；底部给 detail-bar 预留 72px */
+    /* 地图探索工作区：左侧控制面板、右侧地图；详情抽屉覆盖地图底部 */
     display: flex;
+    position: relative;
     align-items: stretch;
     gap: 14px;
     width: 100%;
@@ -84,9 +84,9 @@
     height: 100%;
 }
 
-/* 右：查询面板卡片（tab + 内容区，毛玻璃） */
+/* 左：查询面板卡片（标题 + tab + 内容区，毛玻璃） */
 .map-side {
-    width: 320px;
+    width: 308px;
     flex: none;
     display: flex;
     flex-direction: column;
@@ -97,6 +97,36 @@
     -webkit-backdrop-filter: var(--surface-blur);
     border: 1px solid rgba(180, 160, 120, 0.22);
     box-shadow: var(--shadow-md);
+}
+
+.map-wrapper .side-heading {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 18px 18px 15px;
+    border-bottom: 1px solid rgba(180, 160, 120, 0.14);
+    background: linear-gradient(145deg, rgba(243, 237, 226, .72), rgba(255, 254, 249, .2));
+}
+
+.map-wrapper .side-kicker {
+    color: var(--map-ochre);
+    font-family: 'Playfair Display', serif;
+    font-size: 9px;
+    letter-spacing: 2px;
+}
+
+.map-wrapper .side-heading strong {
+    margin-top: 2px;
+    color: var(--ink);
+    font-family: 'Noto Serif SC', serif;
+    font-size: 17px;
+    letter-spacing: 1.5px;
+}
+
+.map-wrapper .side-heading > span:last-child {
+    color: var(--ink-light);
+    font-size: 11px;
 }
 
 .side-tabs {
@@ -405,6 +435,8 @@
     color: var(--ink);
     border-left: 3px solid transparent;
     transition: background 0.18s ease;
+    content-visibility: auto;
+    contain-intrinsic-size: 36px;
 }
 
 .map-wrapper .line-item:hover {
@@ -482,7 +514,7 @@
 /* ── 底部信息弹框 ── */
 .map-wrapper .detail-bar {
     position: absolute;
-    left: 12px;
+    left: 322px;
     right: 12px;
     bottom: 12px;
     z-index: 200;
@@ -659,12 +691,21 @@
 
 /* ── 响应式（断点与 index.css 一致） ── */
 @media (max-width: 760px) {
-    .map-wrapper .panel {
-        width: calc(100% - 24px);
+    .map-wrapper {
+        flex-direction: column;
+        gap: 10px;
+        min-height: 620px;
     }
 
-    .map-wrapper .panel.collapsed {
-        width: 44px;
+    .map-wrapper .map-side {
+        width: 100%;
+        height: min(34%, 280px);
+        min-height: 220px;
+    }
+
+    .map-wrapper .map-main {
+        flex: 1;
+        min-height: 280px;
     }
 
     .map-wrapper .detail-bar {
@@ -672,6 +713,20 @@
         right: 8px;
         bottom: 8px;
         max-height: 55%;
+    }
+
+    .busmap-page .area-bar {
+        max-width: calc(100% - 24px);
+        gap: 6px;
+        padding: 5px 10px;
+    }
+
+    .map-wrapper .panel {
+        width: calc(100% - 24px);
+    }
+
+    .map-wrapper .panel.collapsed {
+        width: 44px;
     }
 
     .map-wrapper .detail-route {

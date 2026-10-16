@@ -1,8 +1,12 @@
 <template>
     <div class="map-wrapper">
-        <!-- 右：查询面板（tab：线路查询=现有功能；站点/周边=留口子待开发）。
-             DOM 顺序在地图前，flex order 控制视觉在右——原地改造，逻辑零迁移 -->
+        <!-- 左：探索面板（线路查询为现有功能；站点/周边保留后续扩展入口） -->
         <aside class="map-side">
+            <div class="side-heading">
+                <span class="side-kicker">TRANSIT ATLAS</span>
+                <strong>线路探索</strong>
+                <span>搜索城市，或从地图逐级浏览</span>
+            </div>
             <div class="side-tabs">
                 <button v-for="t in SIDE_TABS" :key="t.key" class="side-tab"
                     :class="{ active: sideTab === t.key }" @click="sideTab = t.key">{{ t.label }}</button>
@@ -30,7 +34,7 @@
                 </div>
 
                 <div v-else ref="listScrollbarRef" class="panel-scrollbar">
-                    <div v-for="line in lines" :key="line.id" :ref="(el) => setLineItemRef(line.id, el)"
+                    <div v-for="line in lines" :key="line.id" :data-line-id="line.id"
                         class="line-item"
                         :class="{ active: activeId === line.id }"
                         :style="{ '--line-color': line.color, '--line-gradient': gradientOf(line.color, line.color2) }"
@@ -196,8 +200,7 @@ const mapRef = ref<HTMLDivElement | null>(null);
 const config = useRuntimeConfig();
 
 const keywordInput = ref(props.keyword ?? "");
-const lines = ref<BusLine[]>([]); // 渲染列表（去重后的正向线路）
-const allLines = ref<BusLine[]>([]); // 完整数据（含反向，供切换反向使用）
+const lines = shallowRef<BusLine[]>([]); // 批量替换，不深度代理大量线路与站点对象
 const activeId = ref<string | null>(null);
 // 右侧查询面板的 tab：线路查询=现有功能；站点/周边=留口子（功能筹备中）
 const SIDE_TABS = [
@@ -216,16 +219,13 @@ const totalLines = ref(0); // 总线路数
 // 底部详情弹框是否处于展开状态（选中线路且未收起）
 const isDetailExpanded = computed(() => !!detailLine.value && !bottombarCollapsed.value);
 
-// 左侧列表滚动容器与线路项的 DOM 引用（用于滚动到选中线路）
+// 左侧列表滚动容器（用于滚动到选中线路）
 const listScrollbarRef = ref<any>(null);
-const lineItemRefs = ref<Record<string, HTMLElement | null>>({});
-function setLineItemRef(id: string, el: any) {
-  if (el) lineItemRefs.value[id] = el;
-}
 
 // 滚动左侧列表到指定线路项（带平滑动画）
 function scrollToLine(busId: string) {
-  const item = lineItemRefs.value[busId];
+  const escapedId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(busId) : busId.replace(/["\\]/g, "\\$&");
+  const item = listScrollbarRef.value?.querySelector?.(`[data-line-id="${escapedId}"]`) as HTMLElement | null;
   if (!item) return;
 
   // 用浏览器原生 scrollIntoView，自动滚到最近的滚动容器（我们的 panel-scrollbar），
@@ -354,6 +354,12 @@ function gradientOf(c1?: string, c2?: string): string {
 let map: any = null;
 let AMap: any = null;
 let lineLayers: Record<string, LineLayer> = {};
+const linesById = new Map<string, BusLine>();
+const STOP_NEAR_DISTANCE = 200;
+type LineCandidate = { id: string; name: string; color: string; color2?: string };
+type IndexedStop = { lng: number; lat: number; stopId: string };
+const stopGrid = new Map<string, Map<string, IndexedStop>>();
+const stopLinesById = new Map<string, Map<string, LineCandidate>>();
 
 // 解析 polyline："lng,lat;lng,lat;..."，可能分多段（用 | 分隔）
 function parsePolyline(polylineStr: string): number[][][] {
@@ -402,7 +408,7 @@ function removeStations(busId: string) {
 // 为某条线路创建站点覆盖物（空心圆点 + 站名）
 function addStations(busId: string, color: string) {
     // 从完整数据里找（反向线路可能不在渲染列表 lines 里）
-    const line = allLines.value.find((l) => l.id === busId);
+    const line = linesById.get(busId);
     const layer = lineLayers[busId];
     if (!line || !layer) return;
     removeStations(busId);
@@ -445,7 +451,7 @@ function addStations(busId: string, color: string) {
 
 // 为选中的线路沿路径叠加渐变：按累计距离切成 N 段，每段取起止色之间的插值
 function addGradient(busId: string) {
-    const line = allLines.value.find((l) => l.id === busId);
+    const line = linesById.get(busId);
     const layer = lineLayers[busId];
     if (!line || !layer || !line.color) return;
     removeGradient(busId);
@@ -550,7 +556,7 @@ function highlightLine(busId: string) {
 
     // 若目标线路尚未渲染（反向线路初始被去重跳过），现场渲染
     if (!lineLayers[busId]) {
-        const line = allLines.value.find((l) => l.id === busId);
+        const line = linesById.get(busId);
         if (line) renderLine(line, line.color!);
     }
 
@@ -559,7 +565,7 @@ function highlightLine(busId: string) {
     applyStyle(busId, STYLE.active);
     dimOthers(busId); // 淡化其它线路
 
-    const line = allLines.value.find((l) => l.id === busId);
+    const line = linesById.get(busId);
     if (line?.color) addStations(busId, line.color);
     addGradient(busId);
 
@@ -573,9 +579,9 @@ function highlightLine(busId: string) {
 function selectById(busId: string) {
     highlightLine(busId);
 
-    const line = allLines.value.find((l) => l.id === busId);
+    const line = linesById.get(busId);
     detailLine.value = line ?? null;
-    detailOpposite.value = line?.direc ? line?.direc != line?.id ? allLines.value.find((l) => l.id === line.direc) ?? null : null : null;
+    detailOpposite.value = line?.direc ? line?.direc != line?.id ? linesById.get(line.direc) ?? null : null : null;
     isReverse.value = false;
     currentDisplay.value = line ?? null;
     bottombarCollapsed.value = false;
@@ -615,35 +621,60 @@ function geoDistance(lng1: number, lat1: number, lng2: number, lat2: number): nu
     return Math.sqrt(dLng * dLng + dLat * dLat);
 }
 
-// 点击坐标反查：返回经过"点击点附近站点"的所有线路（含当前点击线路）
-function findLinesNearBy(lnglat: any): { id: string; name: string; color: string; color2?: string }[] {
-    const clng = lnglat.getLng();
-    const clat = lnglat.getLat();
-    const NEAR_DIST = 200; // 附近站点距离阈值（米）
-
-    // 1. 找点击点附近的站点（跨所有线路去重）
-    const nearStopIds = new Set<string>();
-    for (const line of lines.value) {
+// 建立约 200 米网格索引：地图点击时只检查相邻格内的站点，避免每次扫描全量线路站点。
+function indexStops(source: BusLine[]) {
+    for (const line of source) {
         for (const stop of line.busstops || []) {
-            const [slng, slat] = (stop.location || "").split(",").map(Number);
-            if (slng === undefined || slat === undefined || isNaN(slng) || isNaN(slat)) continue;
-            if (geoDistance(clng, clat, slng, slat) <= NEAR_DIST) {
-                nearStopIds.add(String(stop.id ?? `${slng},${slat}`));
-            }
+            const pos = parseLocation(stop.location);
+            if (!pos) continue;
+            const [lng, lat] = pos;
+            const x = lng * 88600;
+            const y = lat * 111000;
+            const cellX = Math.floor(x / STOP_NEAR_DISTANCE);
+            const cellY = Math.floor(y / STOP_NEAR_DISTANCE);
+            const cellKey = `${cellX}:${cellY}`;
+            const stopId = String(stop.id ?? "");
+            const stopKey = `${stopId}:${lng},${lat}`;
+            let cell = stopGrid.get(cellKey);
+            if (!cell) stopGrid.set(cellKey, cell = new Map());
+            let indexed = cell.get(stopKey);
+            if (!indexed) cell.set(stopKey, indexed = { lng, lat, stopId });
+            if (!stopId) continue;
+            let lineGroup = stopLinesById.get(stopId);
+            if (!lineGroup) stopLinesById.set(stopId, lineGroup = new Map());
+            lineGroup.set(line.id, {
+                id: line.id,
+                name: line.name,
+                color: line.color ?? "#999",
+                color2: line.color2,
+            });
         }
     }
+}
 
-    // 2. 找出经过这些站点的所有线路
-    const lineMap = new Map<string, { id: string; name: string; color: string; color2?: string }>();
-    for (const line of lines.value) {
-        for (const stop of line.busstops || []) {
-            const stopKey = String(stop.id ?? "");
-            if (stopKey && nearStopIds.has(stopKey)) {
-                if (!lineMap.has(line.id)) {
-                    lineMap.set(line.id, { id: line.id, name: line.name, color: line.color ?? "#999", color2: line.color2 });
+// 点击坐标反查：返回经过"点击点附近站点"的所有线路（含当前点击线路）
+function findLinesNearBy(lnglat: any): LineCandidate[] {
+    const clng = lnglat.getLng();
+    const clat = lnglat.getLat();
+    const x = clng * 88600;
+    const y = clat * 111000;
+    const cellX = Math.floor(x / STOP_NEAR_DISTANCE);
+    const cellY = Math.floor(y / STOP_NEAR_DISTANCE);
+    const lineMap = new Map<string, LineCandidate>();
+    const nearStopIds = new Set<string>();
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            const cell = stopGrid.get(`${cellX + dx}:${cellY + dy}`);
+            if (!cell) continue;
+            for (const stop of cell.values()) {
+                if (stop.stopId && geoDistance(clng, clat, stop.lng, stop.lat) <= STOP_NEAR_DISTANCE) {
+                    nearStopIds.add(stop.stopId);
                 }
             }
         }
+    }
+    for (const stopId of nearStopIds) {
+        stopLinesById.get(stopId)?.forEach((line, id) => lineMap.set(id, line));
     }
     return Array.from(lineMap.values());
 }
@@ -729,14 +760,46 @@ function renderLine(line: BusLine, color: string) {
     lineLayers[line.id] = { polyline, path, stationOverlays: [], segmentOverlays: [] };
 }
 
+// 整批加入覆盖物，避免全量/区县查询时对地图引擎重复调用数百次 add。
+function renderLineBatch(batch: BusLine[]) {
+    const overlays: any[] = [];
+    for (const line of batch) {
+        if (lineLayers[line.id]) continue;
+        const segments = parsePolyline(line.polyline);
+        const path = segments[0] || [];
+        const polyline = new AMap.Polyline({
+            path,
+            strokeColor: line.color!,
+            lineJoin: "round",
+            lineCap: "round",
+            strokeStyle: "solid",
+            outlineColor: "#ffffff",
+            borderWeight: 1,
+            cursor: "pointer",
+            ...STYLE.default,
+        });
+        polyline.on("click", (e: any) => {
+            const lnglat = e.lnglat || e.originEvent?.lnglat;
+            if (lnglat) handleLineClick(line.id, lnglat, e);
+        });
+        lineLayers[line.id] = { polyline, path, stationOverlays: [], segmentOverlays: [] };
+        overlays.push(polyline);
+    }
+    if (overlays.length) map.add(overlays);
+}
+
 // 清空当前地图上的所有线路与站点，重置状态
 function clearMapLayers() {
+    const overlays: any[] = [];
     Object.values(lineLayers).forEach((layer) => {
-        if (layer.polyline) map.remove(layer.polyline);
-        layer.stationOverlays.forEach((o) => map.remove(o));
-        layer.segmentOverlays.forEach((o) => map.remove(o));
+        if (layer.polyline) overlays.push(layer.polyline);
+        overlays.push(...layer.stationOverlays, ...layer.segmentOverlays);
     });
+    if (overlays.length) map?.remove(overlays);
     lineLayers = {};
+    linesById.clear();
+    stopGrid.clear();
+    stopLinesById.clear();
     lines.value = [];
     activeId.value = null;
     detailLine.value = null;
@@ -747,22 +810,16 @@ function clearMapLayers() {
     bottombarCollapsed.value = true;
 }
 
-// 同一车名、direc 互为对方 id 的两条线只保留第一条（去重反向）
-function dedupeLines(data: BusLine[]): BusLine[] {
-    const kept: BusLine[] = [];
-    const keptIds = new Set<string>();
-    for (const line of data) {
-        // 若该线路的 direc 指向一条已保留的线路，且被指向线路的 direc 也指回自己 → 视为反向，跳过
-        if (line.direc && keptIds.has(line.direc)) {
-            const counterpart = kept.find((k) => k.id === line.direc);
-            if (counterpart && counterpart.direc === line.id) {
-                continue; // 跳过反向线路
-            }
-        }
-        kept.push(line);
-        keptIds.add(line.id);
+// 按批次累积去重结果，避免每页都重新扫描从头开始累积的全量数据。
+function appendVisibleLines(target: BusLine[], known: Map<string, BusLine>, batch: BusLine[]): BusLine[] {
+    const added: BusLine[] = [];
+    for (const line of batch) {
+        if (line.direc && known.has(line.direc) && known.get(line.direc)?.direc === line.id) continue;
+        target.push(line);
+        added.push(line);
+        known.set(line.id, line);
     }
-    return kept;
+    return added;
 }
 
 // 拉取并渲染线路数据（分批加载 + 实时进度条）
@@ -826,7 +883,8 @@ async function loadData(keyword: string, full = false) {
         }
         const totalPages = Math.ceil(total / PAGE_SIZE);
 
-        let all: BusLine[] = [];
+        const visibleLines: BusLine[] = [];
+        const visibleById = new Map<string, BusLine>();
         let loaded = 0;
 
         for (let page = 1; page <= totalPages; page++) {
@@ -841,20 +899,17 @@ async function loadData(keyword: string, full = false) {
             const raw = res.data || [];
             // 为当前批分配颜色（颜色索引基于已累积数量，保证全局一致）
             const colored = raw.map((line: any, i: any) => {
-                const [c1, c2] = PALETTE[(all.length + i) % PALETTE.length]!;
+                const [c1, c2] = PALETTE[(loaded + i) % PALETTE.length]!;
                 return { ...line, color: c1, color2: c2 };
             });
 
-            // 完整数据（含反向，供切换反向使用）
-            all = all.concat(colored);
-            allLines.value = all;
+            colored.forEach((line) => linesById.set(line.id, line));
 
-            // 渲染：去重反向后逐条渲染
-            const valid = dedupeLines(colored);
-            valid.forEach((line) => {
-                if (!lineLayers[line.id]) renderLine(line, line.color!);
-            });
-            lines.value = dedupeLines(all); // 更新左侧列表
+            // 保持反向线路可查以供切换，地图和列表只保留去重后的正向线路。
+            const visibleBatch = appendVisibleLines(visibleLines, visibleById, colored);
+            indexStops(visibleBatch);
+            renderLineBatch(visibleBatch);
+            lines.value = visibleLines.slice();
 
             loaded += colored.length;
             progress.value = Math.round((Math.min(loaded, total) / total) * 100);
@@ -1009,9 +1064,9 @@ function clearAreaLayer() {
 
 // ── 区域线路：钻到区县级之后，把这个区的线路画出来 ──
 //
-// 刻意**复用「搜城市」那一整套管线**（clearMapLayers / renderLine / dedupeLines /
-// allLines / lines），而不是自己再画一遍。理由很实在：
-//   · 样式一致是结构保证的 —— 用的是同一个 renderLine，白色描边、线宽、透明度、
+// 刻意**复用「搜城市」那一整套管线**（clearMapLayers / renderLineBatch / 线路索引 / lines），
+// 而不是自己再画一遍。理由很实在：
+//   · 样式一致是结构保证的 —— 用的是同一个批量渲染器，白色描边、线宽、透明度、
 //     手型光标一个字都不会差；将来改样式也只有一处
 //   · 点选、底部详情、站点圆圈、反向切换、候选弹窗全部现成可用
 // 所以这里只做一件事：把接口数据凑成 pipeline 认识的 BusLine，喂给它。
@@ -1036,7 +1091,8 @@ async function loadAreaLines(adcode: string) {
     areaLineBusy.value = true;
     areaLineProgress.value = { loaded: 0, total: 0, drawn: 0 };
 
-    const acc: BusLine[] = [];
+    const visibleLines: BusLine[] = [];
+    const visibleById = new Map<string, BusLine>();
     const limit = 100;
 
     try {
@@ -1050,17 +1106,16 @@ async function loadAreaLines(adcode: string) {
 
             // 配色按「累计下标」分配，和 loadData 同一套规则，颜色才不会跳
             const batch = (res.data ?? []).map((line: any, i: number) => {
-                const [c1, c2] = PALETTE[(acc.length + i) % PALETTE.length]!;
+                const [c1, c2] = PALETTE[(offset + i) % PALETTE.length]!;
                 return { ...line, color: c1, color2: c2 } as BusLine;
             });
-            acc.push(...batch);
-            allLines.value = acc;
+            const visibleBatch = appendVisibleLines(visibleLines, visibleById, batch);
+            indexStops(visibleBatch);
+            batch.forEach((line) => linesById.set(line.id, line));
 
-            // 去重反向后逐条渲染（正向才画，反向留在 allLines 里供"切换反向"用）
-            dedupeLines(batch).forEach((line) => {
-                if (!lineLayers[line.id]) renderLine(line, line.color!);
-            });
-            lines.value = dedupeLines(acc);
+            // 地图与列表只显示正向线路，正反向完整数据保存在 linesById 供切换使用。
+            renderLineBatch(visibleBatch);
+            lines.value = visibleLines.slice();
             areaLineProgress.value.drawn = lines.value.length;
 
             areaLineProgress.value.loaded = offset + batch.length;
