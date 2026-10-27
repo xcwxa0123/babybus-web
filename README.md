@@ -4,11 +4,8 @@
 
 基于 Nuxt 4 的公交全量线路查询与地图可视化应用，用于可视化分析城市、地区的公交线路覆盖，辅助租房、旅游选址。
 
-数据之外，它还有一层自己的气质：整个产品被做成了**一座剧场**——登录页是幕布后方（深色布面、浮尘、盖章放行），穿过幕布之后是灯亮着的舞台（暖光、金尘在光路里飘、亮纸卡片浮在半空），页脚垂着一条被脚灯照亮的撕布边。
-
 > #### 演示页：https://babybus.drinkwater.fun/busmap （演示页目前只有北京、上海、和部分山东省城市的数据）
 
-![登录页 · 幕布后](docs/screenshots/login.png)
 ![工作台 · 灯亮着的舞台](docs/screenshots/dashboard.png)
 ![地图查询 · 左地图右面板](docs/screenshots/busmap.png)
 ![线路管理](docs/screenshots/buslines.png)
