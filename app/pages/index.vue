@@ -5,9 +5,7 @@
 			<div class="welcome-left">
 				<div class="welcome-time">{{ period }}</div>
 				<h2 class="welcome-title">{{ greetText }}，欢迎回来</h2>
-				<p class="welcome-sub">
-					今天是 {{ today }}，本地库已收录 {{ total }} 条公交线路，覆盖 {{ adcodeCount }} 个区县
-				</p>
+				<p class="welcome-sub">今天是 {{ today }} · 公交数据持续更新</p>
 			</div>
 			<div class="welcome-right">
 				<div class="quick-stat">
@@ -25,10 +23,10 @@
 			</div>
 		</section>
 
-		<!-- ── 功能模块 ── -->
+		<section class="module-section">
 		<div class="sec-header">
-			<div class="sec-eyebrow">MODULES</div>
-			<h3 class="sec-title">功能模块</h3>
+			<div class="sec-eyebrow">MODULES · QUICK ACCESS</div>
+			<h3 class="sec-title">功能入口</h3>
 		</div>
 
 		<div class="module-grid">
@@ -103,10 +101,15 @@
 			</div>
 
 		</div>
+		</section>
 
 		<!-- ── 底部双面板 ── -->
 		<div class="bottom-grid">
-			<section class="panel">
+			<div class="mobile-panel-switch" role="tablist" aria-label="首页数据面板">
+				<button type="button" role="tab" :aria-selected="activeDashboardPanel === 'pulling'" :class="{ active: activeDashboardPanel === 'pulling' }" @click="activeDashboardPanel = 'pulling'">拉取进度</button>
+				<button type="button" role="tab" :aria-selected="activeDashboardPanel === 'recent'" :class="{ active: activeDashboardPanel === 'recent' }" @click="activeDashboardPanel = 'recent'">最近入库</button>
+			</div>
+			<section class="panel dashboard-panel" :class="{ 'is-active-mobile': activeDashboardPanel === 'pulling' }">
 				<div class="panel-head">
 					<div>
 						<div class="panel-lbl">PULLING</div>
@@ -118,7 +121,7 @@
 					<template v-if="runningTasks.length">
 						<div v-for="t in runningTasks" :key="t.citycode" class="task-item">
 							<div class="task-top">
-								<span class="task-city">{{ t.citycode }}</span>
+								<span class="task-city">{{ t.cityname || t.citycode }}</span>
 								<span class="task-num">{{ t.doneNum }} / {{ t.totalNum }}</span>
 							</div>
 							<div class="prog-bar">
@@ -131,7 +134,7 @@
 				</div>
 			</section>
 
-			<section class="panel">
+			<section class="panel dashboard-panel" :class="{ 'is-active-mobile': activeDashboardPanel === 'recent' }">
 				<div class="panel-head">
 					<div>
 						<div class="panel-lbl">RECENT</div>
@@ -161,6 +164,7 @@ const adcodeCount = ref(0)
 const cityTotal = ref(0)
 const runningTasks = ref<any[]>([])
 const recentLines = ref<any[]>([])
+const activeDashboardPanel = ref<'pulling' | 'recent'>('pulling')
 const period = ref('')
 const greetText = ref('你好')
 const today = ref('')

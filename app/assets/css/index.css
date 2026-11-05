@@ -107,6 +107,25 @@ body::after {
     flex: 1 0 auto;
 }
 
+/* 首页锁定视口高度；预留 AppFoot 的原始动态布边和页脚尺寸，不让它们参与压缩。 */
+.app-shell.dashboard-shell {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+}
+.app-shell.dashboard-shell > header,
+.app-shell.dashboard-shell > .foot-hem,
+.app-shell.dashboard-shell > footer {
+    flex: none;
+}
+.app-shell.dashboard-shell > main {
+    display: flex;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* ── 顶栏（AppHeader） ── */
 header {
     position: sticky;
