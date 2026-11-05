@@ -17,9 +17,10 @@ export default defineEventHandler((event) => {
 
     const name = (query.name as string)?.trim() || ''
     const adcode = (query.adcode as string)?.trim() || ''
+    const citycode = (query.citycode as string)?.trim() || ''
     const level = (query.level as string)?.trim() || ''
     const parentAdcode = (query.parentAdcode as string)?.trim() || ''
-    const hasFilter = !!(name || adcode || level || parentAdcode)
+    const hasFilter = !!(name || adcode || citycode || level || parentAdcode)
 
     const whereParts: string[] = []
     const params: any[] = []
@@ -30,6 +31,10 @@ export default defineEventHandler((event) => {
     if (adcode) {
       whereParts.push('c.adcode LIKE ?')
       params.push(`${adcode}%`)
+    }
+    if (citycode) {
+      whereParts.push('c.citycode LIKE ?')
+      params.push(`${citycode}%`)
     }
     if (level) {
       whereParts.push('c.level = ?')

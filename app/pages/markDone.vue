@@ -11,17 +11,24 @@
 
 		<!-- 操作区：查询 -->
 		<section class="panel tools">
-			<div class="tool-row">
-				<div class="tool-name">查询<span>按 citycode 或状态筛选</span></div>
-				<div class="tool-fields">
-					<el-input v-model="filters.citycode" class="w-sm" placeholder="按 citycode 搜索" clearable
+			<div class="filter-heading">
+				<div><div class="tool-name">记录检索</div><div class="filter-hint">按城市编码或拉取状态定位记录</div></div>
+				<div class="filter-result">共 {{ total }} 条记录</div>
+			</div>
+			<div class="tool-fields">
+					<el-input v-model="filters.citycode" class="w-sm" placeholder="输入 citycode" clearable
 						@keyup.enter="onSearch" @clear="onSearch" />
-					<el-input v-model="filters.status" class="w-sm" placeholder="按 status 搜索" clearable
-						@keyup.enter="onSearch" @clear="onSearch" />
-					<el-button type="primary" @click="onSearch">查询</el-button>
+					<ClientOnly>
+						<el-select v-model="filters.status" class="w-sm" placeholder="全部状态" clearable @change="onSearch">
+							<el-option value="0" label="未完成" />
+							<el-option value="1" label="进行中" />
+							<el-option value="2" label="已完成" />
+						</el-select>
+						<template #fallback><el-input class="w-sm" placeholder="全部状态" disabled /></template>
+					</ClientOnly>
+					<div class="filter-actions"><el-button type="primary" @click="onSearch">查询</el-button>
 					<el-button @click="resetSearch">重置</el-button>
-					<el-button @click="loadList">刷新列表</el-button>
-				</div>
+					<el-button @click="loadList">刷新列表</el-button></div>
 			</div>
 		</section>
 
@@ -39,6 +46,9 @@
 					<template #default="{ row }">
 						{{ row.citycode ?? '-' }}
 					</template>
+				</el-table-column>
+				<el-table-column prop="cityname" label="城市名称" min-width="140" show-overflow-tooltip>
+					<template #default="{ row }"><span class="line-name">{{ row.cityname || '—' }}</span></template>
 				</el-table-column>
 				<el-table-column prop="doneNum" label="已执行数量" min-width="140" show-overflow-tooltip>
 					<template #default="{ row }">

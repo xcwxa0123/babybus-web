@@ -4,3 +4,43 @@
 /* 状态徽章：0=未完成（用基础灰），1=进行中（赭），2=已完成（绿） */
 .markdone .status-1 { color: var(--bl-ochre); background: color-mix(in srgb, var(--bl-ochre) 13%, #fff); }
 .markdone .status-2 { color: var(--bl-sage); background: color-mix(in srgb, var(--bl-sage) 13%, #fff); }
+
+/* Compact, structured search panel */
+.markdone .tools {
+    padding: 22px 24px 24px;
+    border-color: rgba(180, 160, 120, 0.22);
+    background: linear-gradient(145deg, rgba(255, 253, 247, 0.98), rgba(250, 247, 237, 0.96));
+}
+.markdone .filter-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.markdone .filter-heading .tool-name { color: var(--ink); font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+.markdone .filter-hint,
+.markdone .filter-result { color: var(--ink-light); font-size: 12px; }
+.markdone .filter-hint { margin-top: 4px; }
+.markdone .tool-fields { display: flex; gap: 10px; }
+.markdone .tool-fields .el-input,
+.markdone .tool-fields .el-select { width: min(240px, 30vw); }
+.markdone .filter-actions { display: flex; gap: 8px; }
+.markdone .filter-actions .el-button + .el-button { margin-left: 0; }
+.markdone .tool-fields .el-input__wrapper,
+.markdone .tool-fields .el-select__wrapper {
+    min-height: 40px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.84);
+    box-shadow: inset 0 0 0 1px rgba(120, 103, 75, .13);
+}
+.markdone .tool-fields .el-input__wrapper:hover,
+.markdone .tool-fields .el-select__wrapper:hover { box-shadow: inset 0 0 0 1px rgba(85, 128, 91, .42); }
+.markdone .tool-fields .el-button { min-height: 40px; border-radius: 10px; }
+
+@media (max-width: 760px) {
+    .markdone .tools { padding: 18px 16px; }
+    .markdone .tool-fields { flex-wrap: wrap; }
+    .markdone .tool-fields .el-input,
+    .markdone .tool-fields .el-select { width: 100%; }
+    .markdone .filter-actions { width: 100%; flex-wrap: wrap; }
+}

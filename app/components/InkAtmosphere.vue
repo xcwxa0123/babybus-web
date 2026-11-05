@@ -706,10 +706,18 @@ onMounted(() => {
 	ro.observe(canvas)
 	raf = requestAnimationFrame(loop)
 
-	// 时段色温：15 点最暖（偏金），凌晨 3 点最冷（偏蓝灰）——挂载时算一次即可
+	// 时段色温：15 点最暖（偏金），凌晨 3 点最冷（偏蓝灰）——挂载时算一次即可。
+	// 冷暖只改色相、不改整体亮度：按 Rec.709 亮度归一化 + 深夜补一点亮度——
+	// 之前的原始通道值在深色舞台上 R 通道被压 8% = 整页"冷一档、暗一档"，
+	// 而 B 通道的提亮人眼几乎不敏感，观感就是"黑黑的"
 	const h = new Date().getHours() + new Date().getMinutes() / 60
 	const w = 0.5 + 0.5 * Math.cos(((h - 15) / 24) * Math.PI * 2)
-	tintRGB = [0.92 + 0.14 * w, 0.97 + 0.03 * w, 1.08 - 0.18 * w]
+	const cr = 0.92 + 0.14 * w
+	const cg = 0.97 + 0.03 * w
+	const cb = 1.08 - 0.18 * w
+	const L = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb
+	const gain = 1.0 + (1.0 - w) * 0.06   // 深夜偏蓝但整体 +6%，避免"冷=黑"
+	tintRGB = [(cr / L) * gain, (cg / L) * gain, (cb / L) * gain]
 })
 
 // 登录成功时由页面调用：一圈暖光从卡片位置扩散

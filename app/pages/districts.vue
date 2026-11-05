@@ -7,18 +7,22 @@
 				<span class="logo-en">Administrative districts</span>
 			</div>
 			<p class="page-meta">
-				共 {{ total }} 个区域，已录边界 {{ withBoundary }} 个<template v-if="hasQuery">，当前命中 {{ matched }} 项</template>
+				共 {{ total }} 个区域，已录边界 {{ withBoundary }} 个<template>，当前命中 {{ matched }} 项</template>
 			</p>
 		</div>
 
 		<!-- 操作区：筛选 -->
 		<section class="panel tools">
-			<div class="tool-row">
-				<div class="tool-name">筛选<span>按名称 / adcode / 层级 / 上级</span></div>
-				<div class="tool-fields">
+			<div class="filter-heading">
+				<div><div class="tool-name">区域检索</div><div class="filter-hint">组合条件定位行政区</div></div>
+				<div class="filter-result">{{ `命中 ${matched} 项` }}</div>
+			</div>
+			<div class="tool-fields">
 					<el-input v-model="filters.name" class="w-lg" placeholder="按名称搜索" clearable
 						@keyup.enter="onSearch" @clear="onSearch" />
 					<el-input v-model="filters.adcode" class="w-sm" placeholder="adcode" clearable
+						@keyup.enter="onSearch" @clear="onSearch" />
+					<el-input v-model="filters.citycode" class="w-sm" placeholder="citycode" clearable
 						@keyup.enter="onSearch" @clear="onSearch" />
 					<!-- el-select 内部会挂 Tooltip，而 Element Plus 的 useTimeout 在 SSR 收尾阶段会执行
 					     window.clearTimeout，服务端没有 window 会直接把渲染干掉，所以必须包进 ClientOnly。
@@ -37,14 +41,15 @@
 					</ClientOnly>
 					<el-input v-model="filters.parentAdcode" class="w-sm" placeholder="上级 adcode" clearable
 						@keyup.enter="onSearch" @clear="onSearch" />
-					<el-button type="primary" @click="onSearch">查询</el-button>
+					<div class="filter-actions"><el-button type="primary" @click="onSearch">查询</el-button>
 					<el-button @click="resetSearch">重置</el-button>
-					<el-button @click="loadList">刷新列表</el-button>
-				</div>
+					<el-button class="refresh-button" @click="loadList">刷新列表</el-button></div>
 			</div>
 		</section>
 
-		<!-- 批量导入：重入口，独立次级面板 -->
+		<details class="panel maintenance-tools" :open="crawlRunning || undefined">
+			<summary><span class="maintenance-mark">＋</span><span class="maintenance-label">低频维护工具</span><span class="maintenance-note">批量导入 · 边界补齐</span><span class="maintenance-state" v-if="crawlRunning">任务运行中</span><span class="maintenance-chevron">⌄</span></summary>
+			<div class="maintenance-content">
 		<section class="panel import-panel">
 			<div>
 				<div class="import-title">批量导入行政区</div>
@@ -82,6 +87,8 @@
 				<el-button v-if="crawlRunning" type="danger" plain @click="crawlRunning = false">停止</el-button>
 			</div>
 		</section>
+			</div>
+		</details>
 
 		<!-- 补边界进度 -->
 		<section v-if="crawlRunning || crawlStats.total > 0" class="panel crawl-run">
@@ -310,11 +317,8 @@ const matched = ref(0)
 // 本次结果是不是「没填任何筛选条件」拿到的（服务端会默认落到中国那个根节点）
 const defaulted = ref(true)
 
-const filters = ref({ name: '', adcode: '', level: '', parentAdcode: '' })
+const filters = ref({ name: '', adcode: '', citycode: '', level: '', parentAdcode: '' })
 
-const hasQuery = computed(
-	() => !!(filters.value.name || filters.value.adcode || filters.value.level || filters.value.parentAdcode)
-)
 
 // done_num_citycode.status：0 未开始 / 1 进行中 / 2 已完成
 // （0 那一批是建库时给每个城市插的占位行，显示成「未开始」是对的）
@@ -341,6 +345,7 @@ async function loadList() {
 			query: {
 				name: filters.value.name || undefined,
 				adcode: filters.value.adcode || undefined,
+				citycode: filters.value.citycode || undefined,
 				level: filters.value.level || undefined,
 				parentAdcode: filters.value.parentAdcode || undefined
 			}
@@ -393,7 +398,7 @@ function onSearch() {
 }
 
 function resetSearch() {
-	filters.value = { name: '', adcode: '', level: '', parentAdcode: '' }
+	filters.value = { name: '', adcode: '', citycode: '', level: '', parentAdcode: '' }
 	loadList()
 }
 
