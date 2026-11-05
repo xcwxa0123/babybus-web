@@ -102,28 +102,6 @@
 				</div>
 			</div>
 
-			<div class="module-card" @click="go('/markdone')">
-				<div class="module-icon-wrap">
-					<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
-						stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M13 5h8" />
-						<path d="M13 12h8" />
-						<path d="M13 19h8" />
-						<path d="m3 17 2 2 4-4" />
-						<path d="m3 7 2 2 4-4" />
-					</svg>
-				</div>
-				<div class="module-name">城市拉取标记</div>
-				<div class="module-desc">记录每个城市已拉取到的 keyword 断点与完成状态，支持中断后继续。</div>
-				<div class="module-footer">
-					<span class="module-tag tag-rose">进度</span>
-					<svg class="module-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none"
-						stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M5 12h14" />
-						<path d="m12 5 7 7-7 7" />
-					</svg>
-				</div>
-			</div>
 		</div>
 
 		<!-- ── 底部双面板 ── -->
@@ -134,7 +112,7 @@
 						<div class="panel-lbl">PULLING</div>
 						<div class="panel-title">拉取进度</div>
 					</div>
-					<div class="panel-more" @click="go('/markdone')">全部 →</div>
+					<div class="panel-more" @click="go('/districts')">全部 →</div>
 				</div>
 				<div class="panel-body">
 					<template v-if="runningTasks.length">

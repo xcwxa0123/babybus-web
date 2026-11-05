@@ -39,6 +39,14 @@
 							<el-input class="w-sm" placeholder="层级" disabled />
 						</template>
 					</ClientOnly>
+					<ClientOnly>
+						<el-select v-model="filters.doneStatus" class="w-sm" placeholder="线路状态" clearable @change="onSearch">
+							<el-option value="0" label="未开始" />
+							<el-option value="1" label="进行中" />
+							<el-option value="2" label="已完成" />
+						</el-select>
+						<template #fallback><el-input class="w-sm" placeholder="线路状态" disabled /></template>
+					</ClientOnly>
 					<el-input v-model="filters.parentAdcode" class="w-sm" placeholder="上级 adcode" clearable
 						@keyup.enter="onSearch" @clear="onSearch" />
 					<div class="filter-actions"><el-button type="primary" @click="onSearch">查询</el-button>
@@ -184,11 +192,12 @@
 					label-class-name="col-center">
 					<template #default="{ row }">{{ row.citycode || '-' }}</template>
 				</el-table-column>
-				<el-table-column label="操作" width="110" class-name="col-center"
+				<el-table-column label="操作" width="164" class-name="col-center"
 					label-class-name="col-center">
 					<template #default="{ row }">
 						<!-- stop：别让点按钮顺带把这一行也展开/收起了 -->
 						<el-button size="small" @click.stop="openEdit(row)">编辑</el-button>
+						<el-button size="small" type="success" plain :disabled="!row.citycode" @click.stop="openMark(row)">标记</el-button>
 					</template>
 				</el-table-column>
 			</el-table>
@@ -197,14 +206,19 @@
 		<!-- 列表改成了父子树形态，不再分页（树一旦分页，语义就乱了） -->
 
 		<!-- 编辑弹窗 -->
-		<el-dialog v-model="editDialog" class="app-dialog" title="编辑行政区" width="720px">
-			<el-form :model="editForm" label-width="96px">
-				<el-form-item label="名称">
-					<span class="form-static">{{ editForm.name }}</span>
-				</el-form-item>
-				<el-form-item label="adcode">
-					<span class="form-static">{{ editForm.adcode || '-' }}</span>
-				</el-form-item>
+		<el-dialog v-model="editDialog" class="app-dialog district-editor-dialog" width="680px">
+			<template #header>
+				<div class="district-dialog-heading">
+					<div class="district-dialog-title">编辑行政区</div>
+					<div class="district-dialog-sub">维护层级归属与行政边界</div>
+				</div>
+			</template>
+			<div class="district-edit-body">
+				<div class="district-edit-context">
+					<div><span>行政区</span><b>{{ editForm.name || '—' }}</b></div>
+					<div><span>adcode</span><b>{{ editForm.adcode || '—' }}</b></div>
+				</div>
+			<el-form :model="editForm" label-width="104px">
 				<el-form-item label="层级">
 					<el-select v-model="editForm.level" placeholder="选择层级" clearable>
 						<el-option value="province" label="省级" />
@@ -227,9 +241,34 @@
 					</div>
 				</el-form-item>
 			</el-form>
+			</div>
 			<template #footer>
 				<el-button @click="editDialog = false">取消</el-button>
 				<el-button type="primary" :loading="saving" @click="submitEdit">保存</el-button>
+			</template>
+		</el-dialog>
+
+		<el-dialog v-model="markDialog" class="app-dialog mark-editor-dialog" width="520px" :show-close="true">
+			<template #header>
+				<div class="mark-dialog-heading">
+					<div><div class="mark-dialog-title">线路拉取标记</div><div class="mark-dialog-sub">记录城市关键词拉取的断点与完成状态</div></div>
+				</div>
+			</template>
+			<div class="mark-dialog-context">
+				<div><span>行政区</span><b>{{ markForm.cityname || '—' }}</b></div>
+				<div><span>citycode</span><b class="mark-code">{{ markForm.citycode || '—' }}</b></div>
+			</div>
+			<div class="mark-field-label">当前断点</div>
+			<el-input v-model="markForm.doneNum" inputmode="numeric" placeholder="已完成的关键词序号" />
+			<div class="mark-field-label mark-status-label">拉取状态</div>
+			<div class="mark-status-options">
+				<button v-for="option in markStatusOptions" :key="option.value" type="button"
+					:class="['mark-status-option', `is-${option.value}`, { selected: Number(markForm.status) === option.value }]"
+					@click="markForm.status = option.value"><span class="status-indicator"></span>{{ option.label }}</button>
+			</div>
+			<template #footer>
+				<el-button @click="markDialog = false">取消</el-button>
+				<el-button type="primary" :loading="markSaving" @click="submitMark">保存标记</el-button>
 			</template>
 		</el-dialog>
 
@@ -317,7 +356,7 @@ const matched = ref(0)
 // 本次结果是不是「没填任何筛选条件」拿到的（服务端会默认落到中国那个根节点）
 const defaulted = ref(true)
 
-const filters = ref({ name: '', adcode: '', citycode: '', level: '', parentAdcode: '' })
+const filters = ref({ name: '', adcode: '', citycode: '', level: '', parentAdcode: '', doneStatus: '' })
 
 
 // done_num_citycode.status：0 未开始 / 1 进行中 / 2 已完成
@@ -346,6 +385,7 @@ async function loadList() {
 				name: filters.value.name || undefined,
 				adcode: filters.value.adcode || undefined,
 				citycode: filters.value.citycode || undefined,
+				doneStatus: filters.value.doneStatus || undefined,
 				level: filters.value.level || undefined,
 				parentAdcode: filters.value.parentAdcode || undefined
 			}
@@ -398,8 +438,57 @@ function onSearch() {
 }
 
 function resetSearch() {
-	filters.value = { name: '', adcode: '', citycode: '', level: '', parentAdcode: '' }
+	filters.value = { name: '', adcode: '', citycode: '', level: '', parentAdcode: '', doneStatus: '' }
 	loadList()
+}
+
+// ---- 线路拉取标记 ----
+const markDialog = ref(false)
+const markSaving = ref(false)
+const markForm = ref<any>({})
+const markStatusOptions = [
+	{ value: 0, label: '未开始' },
+	{ value: 1, label: '进行中' },
+	{ value: 2, label: '已完成' }
+]
+
+function openMark(row: any) {
+	markForm.value = {
+		citycode: row.citycode,
+		cityname: row.level === 'city' ? row.name : (row.parentName || row.name),
+		doneNum: row.doneNum ?? 0,
+		status: Number(row.doneStatus ?? 0)
+	}
+	markDialog.value = true
+}
+
+async function submitMark() {
+	markSaving.value = true
+	try {
+		const payload = {
+			citycode: markForm.value.citycode,
+			doneNum: Number(markForm.value.doneNum) || 0,
+			status: Number(markForm.value.status) || 0
+		}
+		const res = await request('/api/citycodes/saveDoneNum', { method: 'POST', body: payload })
+		if (res?.code !== 200) throw new Error(res?.msg || '保存失败')
+		const syncRows = (rows: any[]) => {
+			for (const row of rows) {
+				if (String(row.citycode ?? '') === String(payload.citycode)) {
+					row.doneStatus = payload.status
+					row.doneNum = payload.doneNum
+				}
+				if (Array.isArray(row.children)) syncRows(row.children)
+			}
+		}
+		syncRows(list.value)
+		ElMessage.success('线路标记已保存')
+		markDialog.value = false
+	} catch (error: any) {
+		ElMessage.error(`保存失败：${error?.message || '未知错误'}`)
+	} finally {
+		markSaving.value = false
+	}
 }
 
 // ---- 编辑 ----
