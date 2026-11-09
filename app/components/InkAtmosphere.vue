@@ -711,7 +711,7 @@ onMounted(() => {
 	// 之前的原始通道值在深色舞台上 R 通道被压 8% = 整页"冷一档、暗一档"，
 	// 而 B 通道的提亮人眼几乎不敏感，观感就是"黑黑的"
 	const h = new Date().getHours() + new Date().getMinutes() / 60
-	const w = 0.5 + 0.5 * Math.cos(((h - 15) / 24) * Math.PI * 2)
+	const w = 1.5 + 0.5 * Math.cos(((h - 15) / 24) * Math.PI * 2)
 	const cr = 0.92 + 0.14 * w
 	const cg = 0.97 + 0.03 * w
 	const cb = 1.08 - 0.18 * w
