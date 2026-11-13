@@ -91,7 +91,7 @@ const mapRunning = ref(false)
 const pullRef = ref<InstanceType<typeof TaskPull> | null>(null)
 
 // ---- 列表 ----
-const city = ref('0631') // 进页面时会被 TaskPull.loadNum 换成上次拉到的 citycode
+const city = ref('') // 进页面时会被 TaskPull.loadNum 换成上次拉到的 citycode
 const list = ref<any[]>([])
 const page = ref(1)
 const pageSize = ref(20)

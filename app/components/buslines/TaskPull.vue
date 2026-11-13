@@ -102,7 +102,7 @@ async function onFetch() {
 }
 
 // ---- 区间循环 ----
-const loopStart = ref('801')  // keyword 起始
+const loopStart = ref('')  // keyword 起始
 const loopEnd = ref('999')    // keyword 截止
 
 const loopRunning = ref(false)
@@ -139,6 +139,10 @@ async function startLoopTask() {
 	const rangeCount = Math.max(0, end - start + 1)
 	if (rangeCount <= 0) {
 		ElMessage.warning('起始 keyword 不能大于截止 keyword')
+		return
+	}
+	if (!props.city || !start || !end) {
+		ElMessage.warning('检查入参, 有值是空我不说是谁')
 		return
 	}
 
